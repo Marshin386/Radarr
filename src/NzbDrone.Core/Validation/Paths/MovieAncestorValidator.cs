@@ -2,16 +2,19 @@ using System.Linq;
 using FluentValidation.Validators;
 using NzbDrone.Common.Extensions;
 using NzbDrone.Core.Movies;
+using NzbDrone.Core.RootFolders;
 
 namespace NzbDrone.Core.Validation.Paths
 {
     public class MovieAncestorValidator : PropertyValidator
     {
         private readonly IMovieService _movieService;
+        private readonly IRootFolderService _rootFolderService;
 
-        public MovieAncestorValidator(IMovieService movieService)
+        public MovieAncestorValidator(IMovieService movieService, IRootFolderService rootFolderService)
         {
             _movieService = movieService;
+            _rootFolderService = rootFolderService;
         }
 
         protected override string GetDefaultMessageTemplate() => "Path '{path}' is an ancestor of an existing movie";
@@ -23,9 +26,16 @@ namespace NzbDrone.Core.Validation.Paths
                 return true;
             }
 
-            context.MessageFormatter.AppendArgument("path", context.PropertyValue.ToString());
+            var path = context.PropertyValue.ToString();
+            context.MessageFormatter.AppendArgument("path", path);
 
-            return !_movieService.AllMoviePaths().Any(s => context.PropertyValue.ToString().IsParentPath(s.Value));
+            // Group folders may contain both loose files and per-movie subfolders.
+            if (_rootFolderService.GetFolderLayout(path) != MovieFolderLayout.MovieFolder)
+            {
+                return true;
+            }
+
+            return !_movieService.AllMoviePaths().Any(s => path.IsParentPath(s.Value));
         }
     }
 }

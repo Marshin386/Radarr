@@ -1,6 +1,7 @@
 using FluentValidation.Validators;
 using NzbDrone.Common.Disk;
 using NzbDrone.Common.Extensions;
+using NzbDrone.Core.Movies;
 using NzbDrone.Core.RootFolders;
 
 namespace NzbDrone.Core.Validation.Paths
@@ -25,7 +26,16 @@ namespace NzbDrone.Core.Validation.Paths
                 return true;
             }
 
-            return !_rootFolderService.All().Exists(r => r.Path.IsPathValid(PathValidationType.CurrentOs) && r.Path.PathEquals(context.PropertyValue.ToString()));
+            var path = context.PropertyValue.ToString();
+            var match = _rootFolderService.All().Find(root => root.Path.IsPathValid(PathValidationType.CurrentOs) && root.Path.PathEquals(path));
+
+            if (match == null)
+            {
+                return true;
+            }
+
+            // Flat and custom movies are stored in the root, or in a folder that can be the root.
+            return match.FolderLayout != MovieFolderLayout.MovieFolder;
         }
     }
 }

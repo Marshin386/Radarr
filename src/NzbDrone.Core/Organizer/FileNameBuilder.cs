@@ -24,6 +24,7 @@ namespace NzbDrone.Core.Organizer
         string BuildFileName(Movie movie, MovieFile movieFile, NamingConfig namingConfig = null, List<CustomFormat> customFormats = null);
         string BuildFilePath(Movie movie, string fileName, string extension);
         string GetMovieFolder(Movie movie, NamingConfig namingConfig = null);
+        string GetCustomMovieFolder(Movie movie, NamingConfig namingConfig = null);
     }
 
     public class FileNameBuilder : IBuildFileNames
@@ -174,13 +175,37 @@ namespace NzbDrone.Core.Organizer
                 namingConfig = _namingConfigService.GetConfig();
             }
 
+            return BuildFolderPath(movie, namingConfig, namingConfig.MovieFolderFormat);
+        }
+
+        public string GetCustomMovieFolder(Movie movie, NamingConfig namingConfig = null)
+        {
+            if (namingConfig == null)
+            {
+                namingConfig = _namingConfigService.GetConfig();
+            }
+
+            if (namingConfig.CustomMovieFolderFormat.IsNullOrWhiteSpace())
+            {
+                return string.Empty;
+            }
+
+            return BuildFolderPath(movie, namingConfig, namingConfig.CustomMovieFolderFormat);
+        }
+
+        private string BuildFolderPath(Movie movie, NamingConfig namingConfig, string pattern)
+        {
+            if (pattern.IsNullOrWhiteSpace())
+            {
+                return string.Empty;
+            }
+
             var tokenHandlers = new Dictionary<string, Func<TokenMatch, string>>(FileNameBuilderTokenEqualityComparer.Instance);
 
             AddMovieTokens(tokenHandlers, movie);
             AddReleaseDateTokens(tokenHandlers, movie.Year);
             AddIdTokens(tokenHandlers, movie);
 
-            var pattern = namingConfig.MovieFolderFormat;
             var splitPatterns = pattern.Split(new char[] { '\\', '/' }, StringSplitOptions.RemoveEmptyEntries);
             var components = new List<string>();
 
@@ -197,6 +222,11 @@ namespace NzbDrone.Core.Organizer
                 {
                     components.Add(component);
                 }
+            }
+
+            if (components.Count == 0)
+            {
+                return string.Empty;
             }
 
             return Path.Combine(components.ToArray());

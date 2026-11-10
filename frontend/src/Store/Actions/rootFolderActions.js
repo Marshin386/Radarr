@@ -52,6 +52,7 @@ export const actionHandlers = handleThunks({
 
   [ADD_ROOT_FOLDER]: function(getState, payload, dispatch) {
     const path = payload.path;
+    const folderLayout = payload.folderLayout || 'movieFolder';
 
     dispatch(set({
       section,
@@ -61,7 +62,7 @@ export const actionHandlers = handleThunks({
     const promise = createAjaxRequest({
       url: '/rootFolder',
       method: 'POST',
-      data: JSON.stringify({ path }),
+      data: JSON.stringify({ path, folderLayout }),
       dataType: 'json'
     }).request;
 

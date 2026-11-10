@@ -30,6 +30,7 @@ namespace Radarr.Api.V3.Config
 
             SharedValidator.RuleFor(c => c.StandardMovieFormat).ValidMovieFormat();
             SharedValidator.RuleFor(c => c.MovieFolderFormat).ValidMovieFolderFormat();
+            SharedValidator.RuleFor(c => c.CustomMovieFolderFormat).ValidCustomMovieFolderFormat();
         }
 
         protected override NamingConfigResource GetResourceById(int id)
@@ -77,6 +78,10 @@ namespace Radarr.Api.V3.Config
             sampleResource.MovieFolderExample = nameSpec.MovieFolderFormat.IsNullOrWhiteSpace()
                 ? null
                 : _filenameSampleService.GetMovieFolderSample(nameSpec);
+
+            sampleResource.CustomMovieFolderExample = nameSpec.CustomMovieFolderFormat.IsNullOrWhiteSpace()
+                ? null
+                : _filenameSampleService.GetCustomMovieFolderSample(nameSpec);
 
             return TypedResults.Ok(sampleResource);
         }

@@ -11,6 +11,7 @@ using NzbDrone.Core.Exceptions;
 using NzbDrone.Core.MetadataSource;
 using NzbDrone.Core.Organizer;
 using NzbDrone.Core.Parser;
+using NzbDrone.Core.RootFolders;
 
 namespace NzbDrone.Core.Movies
 {
@@ -26,6 +27,7 @@ namespace NzbDrone.Core.Movies
         private readonly IMovieMetadataService _movieMetadataService;
         private readonly IProvideMovieInfo _movieInfo;
         private readonly IBuildFileNames _fileNameBuilder;
+        private readonly IRootFolderService _rootFolderService;
         private readonly IAddMovieValidator _addMovieValidator;
         private readonly Logger _logger;
 
@@ -33,6 +35,7 @@ namespace NzbDrone.Core.Movies
                                 IMovieMetadataService movieMetadataService,
                                 IProvideMovieInfo movieInfo,
                                 IBuildFileNames fileNameBuilder,
+                                IRootFolderService rootFolderService,
                                 IAddMovieValidator addMovieValidator,
                                 Logger logger)
         {
@@ -40,6 +43,7 @@ namespace NzbDrone.Core.Movies
             _movieMetadataService = movieMetadataService;
             _movieInfo = movieInfo;
             _fileNameBuilder = fileNameBuilder;
+            _rootFolderService = rootFolderService;
             _addMovieValidator = addMovieValidator;
             _logger = logger;
         }
@@ -132,8 +136,7 @@ namespace NzbDrone.Core.Movies
         {
             if (string.IsNullOrWhiteSpace(newMovie.Path))
             {
-                var folderName = _fileNameBuilder.GetMovieFolder(newMovie);
-                newMovie.Path = Path.Combine(newMovie.RootFolderPath, folderName);
+                newMovie.Path = BuildFolderPath(newMovie);
             }
 
             newMovie.MovieMetadata.Value.CleanTitle = newMovie.Title.CleanMovieTitle();
@@ -148,6 +151,30 @@ namespace NzbDrone.Core.Movies
             }
 
             return newMovie;
+        }
+
+        private string BuildFolderPath(Movie movie)
+        {
+            var layout = _rootFolderService.GetFolderLayout(movie.RootFolderPath);
+
+            if (layout == MovieFolderLayout.Flat)
+            {
+                return movie.RootFolderPath.GetCleanPath();
+            }
+
+            if (layout == MovieFolderLayout.Custom)
+            {
+                var customFolder = _fileNameBuilder.GetCustomMovieFolder(movie);
+
+                if (customFolder.IsNullOrWhiteSpace())
+                {
+                    return movie.RootFolderPath.GetCleanPath();
+                }
+
+                return Path.Combine(movie.RootFolderPath, customFolder);
+            }
+
+            return Path.Combine(movie.RootFolderPath, _fileNameBuilder.GetMovieFolder(movie));
         }
     }
 }

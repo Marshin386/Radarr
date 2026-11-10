@@ -1,11 +1,13 @@
 using System.Collections.Generic;
 using NzbDrone.Core.Datastore;
+using NzbDrone.Core.Movies;
 
 namespace NzbDrone.Core.RootFolders
 {
     public class RootFolder : ModelBase
     {
         public string Path { get; set; }
+        public MovieFolderLayout FolderLayout { get; set; }
         public bool Accessible { get; set; }
         public long? FreeSpace { get; set; }
         public long? TotalSpace { get; set; }

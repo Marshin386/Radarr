@@ -15,13 +15,32 @@ import styles from './RootFolderRow.css';
 interface RootFolderRowProps {
   id: number;
   path: string;
+  folderLayout?: string;
   accessible: boolean;
   freeSpace?: number;
   unmappedFolders: object[];
 }
 
+function folderLayoutLabel(folderLayout?: string) {
+  switch (folderLayout) {
+    case 'flat':
+      return translate('MovieFolderLayoutFlat');
+    case 'custom':
+      return translate('MovieFolderLayoutCustom');
+    default:
+      return translate('MovieFolderLayoutMovieFolder');
+  }
+}
+
 function RootFolderRow(props: RootFolderRowProps) {
-  const { id, path, accessible, freeSpace = 0, unmappedFolders = [] } = props;
+  const {
+    id,
+    path,
+    folderLayout,
+    accessible,
+    freeSpace = 0,
+    unmappedFolders = [],
+  } = props;
 
   const isUnavailable = !accessible;
 
@@ -66,6 +85,8 @@ function RootFolderRow(props: RootFolderRowProps) {
           ? '-'
           : formatBytes(freeSpace)}
       </TableRowCell>
+
+      <TableRowCell>{folderLayoutLabel(folderLayout)}</TableRowCell>
 
       <TableRowCell className={styles.unmappedFolders}>
         {isUnavailable ? '-' : unmappedFolders.length}

@@ -44,7 +44,10 @@ function createNamingSelector() {
 }
 
 interface NamingModalOptions {
-  name: keyof Pick<NamingConfig, 'standardMovieFormat' | 'movieFolderFormat'>;
+  name: keyof Pick<
+    NamingConfig,
+    'standardMovieFormat' | 'movieFolderFormat' | 'customMovieFolderFormat'
+  >;
   movie?: boolean;
   additional?: boolean;
 }
@@ -111,6 +114,14 @@ function Naming() {
     });
   }, [setNamingModalOpen, setNamingModalOptions]);
 
+  const onCustomMovieFolderNamingModalOpenClick = useCallback(() => {
+    setNamingModalOpen();
+
+    setNamingModalOptions({
+      name: 'customMovieFolderFormat',
+    });
+  }, [setNamingModalOpen, setNamingModalOptions]);
+
   const renameMovies = hasSettings && settings.renameMovies.value;
   const replaceIllegalCharacters =
     hasSettings && settings.replaceIllegalCharacters.value;
@@ -131,6 +142,8 @@ function Naming() {
   const standardMovieFormatErrors = [];
   const movieFolderFormatHelpTexts = [];
   const movieFolderFormatErrors = [];
+  const customMovieFolderFormatHelpTexts = [];
+  const customMovieFolderFormatErrors = [];
 
   if (examplesPopulated) {
     if (examples.movieExample) {
@@ -149,6 +162,14 @@ function Naming() {
       );
     } else {
       movieFolderFormatErrors.push({ message: translate('InvalidFormat') });
+    }
+
+    if (examples.customMovieFolderExample) {
+      customMovieFolderFormatHelpTexts.push(
+        `${translate('Example')}: ${examples.customMovieFolderExample}`
+      );
+    } else if (settings.customMovieFolderFormat?.value) {
+      customMovieFolderFormatErrors.push({ message: translate('InvalidFormat') });
     }
   }
 
@@ -258,6 +279,35 @@ function Naming() {
               ]}
             />
           </FormGroup>
+
+          {settings.customMovieFolderFormat ? (
+            <FormGroup advancedSettings={advancedSettings} isAdvanced={true}>
+              <FormLabel>{translate('CustomMovieFolderFormat')}</FormLabel>
+
+              <FormInputGroup
+                inputClassName={styles.namingInput}
+                type={inputTypes.TEXT}
+                name="customMovieFolderFormat"
+                buttons={
+                  <FormInputButton
+                    onPress={onCustomMovieFolderNamingModalOpenClick}
+                  >
+                    ?
+                  </FormInputButton>
+                }
+                onChange={handleInputChange}
+                {...settings.customMovieFolderFormat}
+                helpTexts={[
+                  translate('CustomMovieFolderFormatHelpText'),
+                  ...customMovieFolderFormatHelpTexts,
+                ]}
+                errors={[
+                  ...customMovieFolderFormatErrors,
+                  ...settings.customMovieFolderFormat.errors,
+                ]}
+              />
+            </FormGroup>
+          ) : null}
 
           {namingModalOptions ? (
             <NamingModal

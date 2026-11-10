@@ -9,6 +9,7 @@ using NzbDrone.Common.Cache;
 using NzbDrone.Common.Disk;
 using NzbDrone.Common.Extensions;
 using NzbDrone.Core.Configuration;
+using NzbDrone.Core.MediaFiles;
 using NzbDrone.Core.Movies;
 using NzbDrone.Core.Organizer;
 
@@ -22,6 +23,7 @@ namespace NzbDrone.Core.RootFolders
         void Remove(int id);
         RootFolder Get(int id, bool timeout);
         string GetBestRootFolderPath(string path, List<RootFolder> rootFolders = null);
+        MovieFolderLayout GetFolderLayout(string path);
     }
 
     public class RootFolderService : IRootFolderService
@@ -29,6 +31,7 @@ namespace NzbDrone.Core.RootFolders
         private readonly IRootFolderRepository _rootFolderRepository;
         private readonly IDiskProvider _diskProvider;
         private readonly IMovieRepository _movieRepository;
+        private readonly IMediaFileService _mediaFileService;
         private readonly IConfigService _configService;
         private readonly INamingConfigService _namingConfigService;
         private readonly Logger _logger;
@@ -51,6 +54,7 @@ namespace NzbDrone.Core.RootFolders
         public RootFolderService(IRootFolderRepository rootFolderRepository,
                                  IDiskProvider diskProvider,
                                  IMovieRepository movieRepository,
+                                 IMediaFileService mediaFileService,
                                  IConfigService configService,
                                  INamingConfigService namingConfigService,
                                  ICacheManager cacheManager,
@@ -59,6 +63,7 @@ namespace NzbDrone.Core.RootFolders
             _rootFolderRepository = rootFolderRepository;
             _diskProvider = diskProvider;
             _movieRepository = movieRepository;
+            _mediaFileService = mediaFileService;
             _configService = configService;
             _namingConfigService = namingConfigService;
             _logger = logger;
@@ -157,6 +162,11 @@ namespace NzbDrone.Core.RootFolders
                 return results;
             }
 
+            if (GetFolderLayout(path) != MovieFolderLayout.MovieFolder)
+            {
+                return GetUnmappedMovieFiles(path, moviePaths);
+            }
+
             var subFolderDepth = _namingConfigService.GetConfig().MovieFolderFormat.Count(f => f == Path.DirectorySeparatorChar);
             var possibleMovieFolders = _diskProvider.GetDirectories(path).ToList();
 
@@ -212,6 +222,21 @@ namespace NzbDrone.Core.RootFolders
             return _cache.Get(path, () => GetBestRootFolderPathInternal(path, rootFolders), TimeSpan.FromDays(1));
         }
 
+        public MovieFolderLayout GetFolderLayout(string path)
+        {
+            if (path.IsNullOrWhiteSpace() || !path.IsPathValid(PathValidationType.CurrentOs))
+            {
+                return MovieFolderLayout.MovieFolder;
+            }
+
+            var match = All()
+                .Where(root => root.Path.IsNotNullOrWhiteSpace() && root.Path.IsPathValid(PathValidationType.CurrentOs))
+                .Where(root => root.Path.PathEquals(path) || root.Path.IsParentPath(path))
+                .MaxBy(root => root.Path.Length);
+
+            return match?.FolderLayout ?? MovieFolderLayout.MovieFolder;
+        }
+
         private void GetDetails(RootFolder rootFolder, Dictionary<int, string> moviePaths, bool timeout)
         {
             Task.Run(() =>
@@ -230,6 +255,13 @@ namespace NzbDrone.Core.RootFolders
         {
             var allRootFoldersToConsider = rootFolders ?? All();
 
+            var exactRootFolder = allRootFoldersToConsider.FirstOrDefault(root => root.Path.IsNotNullOrWhiteSpace() && root.Path.PathEquals(path));
+
+            if (exactRootFolder != null)
+            {
+                return exactRootFolder.Path.GetCleanPath();
+            }
+
             var possibleRootFolder = allRootFoldersToConsider.Where(r => r.Path.IsParentPath(path)).MaxBy(r => r.Path.Length);
 
             if (possibleRootFolder == null)
@@ -240,6 +272,112 @@ namespace NzbDrone.Core.RootFolders
             }
 
             return possibleRootFolder.Path.GetCleanPath();
+        }
+
+        private List<UnmappedFolder> GetUnmappedMovieFiles(string path, Dictionary<int, string> moviePaths)
+        {
+            _logger.Debug("Generating list of unmapped movie files for {0}", path);
+
+            var results = new List<UnmappedFolder>();
+
+            if (!_diskProvider.FolderExists(path))
+            {
+                return results;
+            }
+
+            var layout = GetFolderLayout(path);
+            var files = _diskProvider.GetFiles(path, layout == MovieFolderLayout.Custom) ?? Enumerable.Empty<string>();
+            var mappedSharedFiles = MappedSharedMovieFiles(moviePaths);
+
+            foreach (var file in files)
+            {
+                if (!MediaFileExtensions.Extensions.Contains(Path.GetExtension(file)))
+                {
+                    continue;
+                }
+
+                try
+                {
+                    if (MovieLibraryPathFilter.ShouldIgnore(path, file))
+                    {
+                        continue;
+                    }
+                }
+                catch (NotParentException)
+                {
+                    continue;
+                }
+
+                if (mappedSharedFiles.Contains(file) || IsInsideDedicatedMovieFolder(file, moviePaths))
+                {
+                    continue;
+                }
+
+                var directory = Path.GetDirectoryName(file);
+
+                if (directory.IsNullOrWhiteSpace())
+                {
+                    continue;
+                }
+
+                results.Add(new UnmappedFolder
+                {
+                    Name = MovieFileLayout.GetLookupTerm(file),
+                    Path = directory,
+                    RelativePath = path.GetRelativePath(file)
+                });
+            }
+
+            _logger.Debug("{0} unmapped movie files detected.", results.Count);
+            return results.OrderBy(item => item.RelativePath, StringComparer.InvariantCultureIgnoreCase).ToList();
+        }
+
+        private HashSet<string> MappedSharedMovieFiles(Dictionary<int, string> moviePaths)
+        {
+            var mapped = new HashSet<string>(PathEqualityComparer.Instance);
+            var sharedMovieIds = moviePaths
+                .Where(entry => entry.Value.IsNotNullOrWhiteSpace() && GetFolderLayout(entry.Value) != MovieFolderLayout.MovieFolder)
+                .Select(entry => entry.Key)
+                .ToList();
+
+            if (!sharedMovieIds.Any())
+            {
+                return mapped;
+            }
+
+            foreach (var movieFile in _mediaFileService.GetFilesByMovies(sharedMovieIds) ?? new List<MovieFile>())
+            {
+                if (!moviePaths.TryGetValue(movieFile.MovieId, out var moviePath) || movieFile.RelativePath.IsNullOrWhiteSpace())
+                {
+                    continue;
+                }
+
+                mapped.Add(Path.Combine(moviePath, movieFile.RelativePath));
+            }
+
+            return mapped;
+        }
+
+        private bool IsInsideDedicatedMovieFolder(string file, Dictionary<int, string> moviePaths)
+        {
+            var directory = Path.GetDirectoryName(file);
+
+            foreach (var moviePath in moviePaths.Values)
+            {
+                if (moviePath.IsNullOrWhiteSpace())
+                {
+                    continue;
+                }
+
+                var containsFile = moviePath.PathEquals(directory) || moviePath.IsParentPath(file);
+
+                if (containsFile && GetFolderLayout(moviePath) == MovieFolderLayout.MovieFolder)
+                {
+                    return true;
+                }
+            }
+
+            return false;
         }
     }
 }

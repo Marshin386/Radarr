@@ -40,6 +40,24 @@ namespace NzbDrone.Core.HealthCheck.Checks
                 }
             }
 
+            if (namingConfig.CustomMovieFolderFormat.IsNotNullOrWhiteSpace())
+            {
+                var match = FileNameValidation.DeprecatedMovieFolderTokensRegex.Matches(namingConfig.CustomMovieFolderFormat);
+
+                if (match.Any())
+                {
+                    return new HealthCheck(
+                        GetType(),
+                        HealthCheckResult.Error,
+                        HealthCheckReason.NamingConfigDeprecatedToken,
+                        _localizationService.GetLocalizedString(
+                            "NamingConfigMovieFolderFormatDeprecatedHealthCheckMessage", new Dictionary<string, object>
+                            {
+                                { "tokens", string.Join(", ", match.Select(c => c.Value).ToArray()) },
+                            }));
+                }
+            }
+
             return new HealthCheck(GetType());
         }
     }

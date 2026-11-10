@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
-using System.Text.RegularExpressions;
 using NLog;
 using NzbDrone.Common.Disk;
 using NzbDrone.Common.Extensions;
@@ -40,6 +39,7 @@ namespace NzbDrone.Core.MediaFiles
         private readonly IMediaFileService _mediaFileService;
         private readonly IMediaFileTableCleanupService _mediaFileTableCleanupService;
         private readonly IRootFolderService _rootFolderService;
+        private readonly IMovieLayoutService _movieLayoutService;
         private readonly IUpdateMediaInfo _updateMediaInfoService;
         private readonly IEventAggregator _eventAggregator;
         private readonly Logger _logger;
@@ -52,6 +52,7 @@ namespace NzbDrone.Core.MediaFiles
                                IMediaFileService mediaFileService,
                                IMediaFileTableCleanupService mediaFileTableCleanupService,
                                IRootFolderService rootFolderService,
+                               IMovieLayoutService movieLayoutService,
                                IUpdateMediaInfo updateMediaInfoService,
                                IEventAggregator eventAggregator,
                                Logger logger)
@@ -64,15 +65,11 @@ namespace NzbDrone.Core.MediaFiles
             _mediaFileService = mediaFileService;
             _mediaFileTableCleanupService = mediaFileTableCleanupService;
             _rootFolderService = rootFolderService;
+            _movieLayoutService = movieLayoutService;
             _updateMediaInfoService = updateMediaInfoService;
             _eventAggregator = eventAggregator;
             _logger = logger;
         }
-
-        private static readonly Regex ExcludedExtrasSubFolderRegex = new Regex(@"(?:\\|\/|^)(?:extras|extrafanart|behind the scenes|deleted scenes|featurettes|interviews|other|scenes|sample[s]?|shorts|trailers)(?:\\|\/)", RegexOptions.Compiled | RegexOptions.IgnoreCase);
-        private static readonly Regex ExcludedSubFoldersRegex = new Regex(@"(?:\\|\/|^)(?:@eadir|\.@__thumb|plex versions|\.[^\\/]+)(?:\\|\/)", RegexOptions.Compiled | RegexOptions.IgnoreCase);
-        private static readonly Regex ExcludedExtraFilesRegex = new Regex(@"(-(trailer|other|behindthescenes|deleted|featurette|interview|scene|short)\.[^.]+$)", RegexOptions.Compiled | RegexOptions.IgnoreCase);
-        private static readonly Regex ExcludedFilesRegex = new Regex(@"^\.(_|unmanic|DS_Store$)|^Thumbs\.db$", RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
         public void Scan(Movie movie)
         {
@@ -127,7 +124,15 @@ namespace NzbDrone.Core.MediaFiles
             }
 
             var videoFilesStopwatch = Stopwatch.StartNew();
-            var mediaFileList = FilterPaths(movie.Path, GetVideoFiles(movie.Path)).ToList();
+            var layout = _movieLayoutService.GetLayout(movie);
+            var searchSubfolders = layout == MovieFolderLayout.MovieFolder;
+            var mediaFileList = FilterPaths(movie.Path, GetVideoFiles(movie.Path, searchSubfolders)).ToList();
+
+            if (layout != MovieFolderLayout.MovieFolder)
+            {
+                mediaFileList = _movieLayoutService.SelectVideoFiles(movie, mediaFileList);
+            }
+
             videoFilesStopwatch.Stop();
             _logger.Trace("Finished getting movie files for: {0} [{1}]", movie, videoFilesStopwatch.Elapsed);
 
@@ -173,10 +178,15 @@ namespace NzbDrone.Core.MediaFiles
             fileInfoStopwatch.Stop();
             _logger.Trace("Reprocessing existing files complete for: {0} [{1}]", movie, decisionsStopwatch.Elapsed);
 
-            var filesOnDisk = GetNonVideoFiles(movie.Path);
+            var filesOnDisk = GetNonVideoFiles(movie.Path, searchSubfolders);
             var possibleExtraFiles = FilterPaths(movie.Path, filesOnDisk);
 
-            RemoveEmptyMovieFolder(movie.Path);
+            if (layout != MovieFolderLayout.MovieFolder)
+            {
+                possibleExtraFiles = _movieLayoutService.SelectExtraFiles(movie, possibleExtraFiles, mediaFileList);
+            }
+
+            RemoveEmptyMovieFolder(movie);
             CompletedScanning(movie, possibleExtraFiles);
         }
 
@@ -224,18 +234,7 @@ namespace NzbDrone.Core.MediaFiles
 
         public List<string> FilterPaths(string basePath, IEnumerable<string> paths, bool filterExtras = true)
         {
-            var filteredPaths =  paths.Where(path => !ExcludedSubFoldersRegex.IsMatch(basePath.GetRelativePath(path)))
-                                      .Where(path => !ExcludedFilesRegex.IsMatch(Path.GetFileName(path)))
-                                      .ToList();
-
-            if (filterExtras)
-            {
-                filteredPaths = filteredPaths.Where(path => !ExcludedExtrasSubFolderRegex.IsMatch(basePath.GetRelativePath(path)))
-                                             .Where(path => !ExcludedExtraFilesRegex.IsMatch(Path.GetFileName(path)))
-                                             .ToList();
-            }
-
-            return filteredPaths;
+            return paths.Where(path => !MovieLibraryPathFilter.ShouldIgnore(basePath, path, filterExtras)).ToList();
         }
 
         private void SetPermissions(string path)
@@ -256,13 +255,23 @@ namespace NzbDrone.Core.MediaFiles
             }
         }
 
-        private void RemoveEmptyMovieFolder(string path)
+        private void RemoveEmptyMovieFolder(Movie movie)
         {
             if (_configService.DeleteEmptyFolders)
             {
+                var path = movie.Path;
+                var rootFolder = _rootFolderService.GetBestRootFolderPath(path);
+                var layout = _movieLayoutService.GetLayout(movie);
+
+                // A flat movie's folder is the root. Never delete it, even when this movie has no files left.
+                if (layout != MovieFolderLayout.MovieFolder && path.PathEquals(rootFolder))
+                {
+                    return;
+                }
+
                 _diskProvider.RemoveEmptySubfolders(path);
 
-                if (_diskProvider.FolderEmpty(path))
+                if (layout == MovieFolderLayout.MovieFolder && _diskProvider.FolderEmpty(path))
                 {
                     _diskProvider.DeleteFolder(path, true);
                 }

@@ -38,6 +38,25 @@ namespace NzbDrone.Core.Movies
                 return Path.Combine(movie.RootFolderPath, relativePath);
             }
 
+            var layout = _rootFolderService.GetFolderLayout(movie.RootFolderPath);
+
+            if (layout == MovieFolderLayout.Flat)
+            {
+                return movie.RootFolderPath.GetCleanPath();
+            }
+
+            if (layout == MovieFolderLayout.Custom)
+            {
+                var customFolder = _fileNameBuilder.GetCustomMovieFolder(movie);
+
+                if (customFolder.IsNullOrWhiteSpace())
+                {
+                    return movie.RootFolderPath.GetCleanPath();
+                }
+
+                return Path.Combine(movie.RootFolderPath, customFolder);
+            }
+
             return Path.Combine(movie.RootFolderPath, _fileNameBuilder.GetMovieFolder(movie));
         }
 

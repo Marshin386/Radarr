@@ -12,6 +12,7 @@ using NzbDrone.Core.MetadataSource;
 using NzbDrone.Core.Movies;
 using NzbDrone.Core.Movies.Credits;
 using NzbDrone.Core.Organizer;
+using NzbDrone.Core.RootFolders;
 using NzbDrone.Core.Test.Framework;
 using NzbDrone.Test.Common;
 
@@ -82,6 +83,28 @@ namespace NzbDrone.Core.Test.MovieTests
             var series = Subject.AddMovie(newMovie);
 
             series.Path.Should().Be(Path.Combine(newMovie.RootFolderPath, _fakeMovie.Title));
+        }
+
+        [Test]
+        public void should_place_a_new_movie_in_the_root_when_the_layout_is_flat()
+        {
+            var root = @"C:\Test\Movies".AsOsAgnostic();
+            var newMovie = new Movie
+            {
+                TmdbId = 1,
+                RootFolderPath = root
+            };
+
+            GivenValidMovie(newMovie.TmdbId);
+            GivenValidPath();
+
+            Mocker.GetMock<IRootFolderService>()
+                .Setup(service => service.GetFolderLayout(root))
+                .Returns(MovieFolderLayout.Flat);
+
+            var added = Subject.AddMovie(newMovie);
+
+            added.Path.Should().Be(root);
         }
 
         [Test]

@@ -6,6 +6,7 @@ namespace Radarr.Api.V3.Config
     {
         public string MovieExample { get; set; }
         public string MovieFolderExample { get; set; }
+        public string CustomMovieFolderExample { get; set; }
     }
 
     public static class NamingConfigResourceMapper
@@ -20,7 +21,8 @@ namespace Radarr.Api.V3.Config
                 ReplaceIllegalCharacters = model.ReplaceIllegalCharacters,
                 ColonReplacementFormat = model.ColonReplacementFormat,
                 StandardMovieFormat = model.StandardMovieFormat,
-                MovieFolderFormat = model.MovieFolderFormat
+                MovieFolderFormat = model.MovieFolderFormat,
+                CustomMovieFolderFormat = model.CustomMovieFolderFormat
             };
         }
 
@@ -35,6 +37,7 @@ namespace Radarr.Api.V3.Config
                 ColonReplacementFormat = resource.ColonReplacementFormat,
                 StandardMovieFormat = resource.StandardMovieFormat,
                 MovieFolderFormat = resource.MovieFolderFormat,
+                CustomMovieFolderFormat = resource.CustomMovieFolderFormat
             };
         }
     }

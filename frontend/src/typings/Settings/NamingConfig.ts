@@ -11,4 +11,5 @@ export default interface NamingConfig {
   colonReplacementFormat: ColonReplacementFormat;
   standardMovieFormat: string;
   movieFolderFormat: string;
+  customMovieFolderFormat: string;
 }

@@ -23,6 +23,11 @@ const rootFolderColumns: Column[] = [
     isVisible: true,
   },
   {
+    name: 'folderLayout',
+    label: () => translate('MovieFolderLayout'),
+    isVisible: true,
+  },
+  {
     name: 'unmappedFolders',
     label: () => translate('UnmappedFolders'),
     isVisible: true,
@@ -64,6 +69,7 @@ function RootFolders() {
               key={rootFolder.id}
               id={rootFolder.id}
               path={rootFolder.path}
+              folderLayout={rootFolder.folderLayout}
               accessible={rootFolder.accessible}
               freeSpace={rootFolder.freeSpace}
               unmappedFolders={rootFolder.unmappedFolders}

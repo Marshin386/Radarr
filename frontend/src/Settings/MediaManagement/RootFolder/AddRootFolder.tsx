@@ -2,13 +2,16 @@ import React, { useCallback, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import Alert from 'Components/Alert';
 import FileBrowserModal from 'Components/FileBrowser/FileBrowserModal';
+import FormInputGroup from 'Components/Form/FormInputGroup';
 import Icon from 'Components/Icon';
 import Button from 'Components/Link/Button';
-import { icons, kinds, sizes } from 'Helpers/Props';
+import { icons, inputTypes, kinds, sizes } from 'Helpers/Props';
 import { addRootFolder } from 'Store/Actions/rootFolderActions';
 import createRootFoldersSelector from 'Store/Selectors/createRootFoldersSelector';
 import translate from 'Utilities/String/translate';
 import styles from './AddRootFolder.css';
+
+type FolderLayout = 'movieFolder' | 'flat' | 'custom';
 
 function AddRootFolder() {
   const { isSaving, saveError } = useSelector(createRootFoldersSelector());
@@ -17,16 +20,33 @@ function AddRootFolder() {
 
   const [isAddNewRootFolderModalOpen, setIsAddNewRootFolderModalOpen] =
     useState(false);
+  const [folderLayout, setFolderLayout] = useState<FolderLayout>('movieFolder');
+
+  const layoutOptions = [
+    {
+      key: 'movieFolder',
+      value: translate('MovieFolderLayoutMovieFolder'),
+    },
+    { key: 'flat', value: translate('MovieFolderLayoutFlat') },
+    { key: 'custom', value: translate('MovieFolderLayoutCustom') },
+  ];
 
   const onAddNewRootFolderPress = useCallback(() => {
     setIsAddNewRootFolderModalOpen(true);
   }, [setIsAddNewRootFolderModalOpen]);
 
+  const onFolderLayoutChange = useCallback(
+    ({ value }: { value: string }) => {
+      setFolderLayout(value as FolderLayout);
+    },
+    []
+  );
+
   const onNewRootFolderSelect = useCallback(
     ({ value }: { value: string }) => {
-      dispatch(addRootFolder({ path: value }));
+      dispatch(addRootFolder({ path: value, folderLayout }));
     },
-    [dispatch]
+    [dispatch, folderLayout]
   );
 
   const onAddRootFolderModalClose = useCallback(() => {
@@ -52,6 +72,15 @@ function AddRootFolder() {
       ) : null}
 
       <div className={styles.addRootFolderButtonContainer}>
+        <FormInputGroup
+          type={inputTypes.SELECT}
+          name="folderLayout"
+          value={folderLayout}
+          values={layoutOptions}
+          helpText={translate('MovieFolderLayoutHelpText')}
+          onChange={onFolderLayoutChange}
+        />
+
         <Button
           kind={kinds.PRIMARY}
           size={sizes.LARGE}

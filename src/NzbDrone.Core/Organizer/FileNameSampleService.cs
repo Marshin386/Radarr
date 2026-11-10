@@ -11,6 +11,7 @@ namespace NzbDrone.Core.Organizer
     {
         SampleResult GetMovieSample(NamingConfig nameSpec);
         string GetMovieFolderSample(NamingConfig nameSpec);
+        string GetCustomMovieFolderSample(NamingConfig nameSpec);
     }
 
     public class FileNameSampleService : IFilenameSampleService
@@ -105,6 +106,11 @@ namespace NzbDrone.Core.Organizer
         public string GetMovieFolderSample(NamingConfig nameSpec)
         {
             return _buildFileNames.GetMovieFolder(_movie, nameSpec);
+        }
+
+        public string GetCustomMovieFolderSample(NamingConfig nameSpec)
+        {
+            return _buildFileNames.GetCustomMovieFolder(_movie, nameSpec);
         }
 
         private string BuildSample(Movie movie, MovieFile movieFile, NamingConfig nameSpec)

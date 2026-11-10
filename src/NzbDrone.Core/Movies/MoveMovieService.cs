@@ -1,36 +1,46 @@
+using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using NLog;
 using NzbDrone.Common.Disk;
 using NzbDrone.Common.Extensions;
 using NzbDrone.Common.Instrumentation.Extensions;
+using NzbDrone.Core.MediaFiles;
 using NzbDrone.Core.Messaging.Commands;
 using NzbDrone.Core.Messaging.Events;
 using NzbDrone.Core.Movies.Commands;
 using NzbDrone.Core.Movies.Events;
 using NzbDrone.Core.Organizer;
+using NzbDrone.Core.RootFolders;
 
 namespace NzbDrone.Core.Movies
 {
     public class MoveMovieService : IExecute<MoveMovieCommand>, IExecute<BulkMoveMovieCommand>
     {
         private readonly IMovieService _movieService;
+        private readonly IMediaFileService _mediaFileService;
         private readonly IBuildFileNames _filenameBuilder;
         private readonly IDiskProvider _diskProvider;
         private readonly IDiskTransferService _diskTransferService;
+        private readonly IRootFolderService _rootFolderService;
         private readonly IEventAggregator _eventAggregator;
         private readonly Logger _logger;
 
         public MoveMovieService(IMovieService movieService,
+                                 IMediaFileService mediaFileService,
                                  IBuildFileNames filenameBuilder,
                                  IDiskProvider diskProvider,
                                  IDiskTransferService diskTransferService,
+                                 IRootFolderService rootFolderService,
                                  IEventAggregator eventAggregator,
                                  Logger logger)
         {
             _movieService = movieService;
+            _mediaFileService = mediaFileService;
             _filenameBuilder = filenameBuilder;
             _diskProvider = diskProvider;
             _diskTransferService = diskTransferService;
+            _rootFolderService = rootFolderService;
             _eventAggregator = eventAggregator;
             _logger = logger;
         }
@@ -66,8 +76,15 @@ namespace NzbDrone.Core.Movies
 
             try
             {
-                _diskProvider.CreateFolder(new DirectoryInfo(destinationPath).Parent.FullName);
-                _diskTransferService.TransferFolder(sourcePath, destinationPath, TransferMode.Move);
+                if (ShouldMoveFilesIndividually(movie, sourcePath))
+                {
+                    MoveMovieFiles(movie, sourcePath, destinationPath);
+                }
+                else
+                {
+                    _diskProvider.CreateFolder(new DirectoryInfo(destinationPath).Parent.FullName);
+                    _diskTransferService.TransferFolder(sourcePath, destinationPath, TransferMode.Move);
+                }
 
                 _logger.ProgressInfo("{0} moved successfully to {1}", movie.Title, destinationPath);
 
@@ -106,12 +123,101 @@ namespace NzbDrone.Core.Movies
             {
                 var s = moviesToMove[index];
                 var movie = _movieService.GetMovie(s.MovieId);
-                var destinationPath = Path.Combine(destinationRootFolder, _filenameBuilder.GetMovieFolder(movie));
+                var destinationPath = BuildDestinationPath(movie, destinationRootFolder);
 
                 MoveSingleMovie(movie, s.SourcePath, destinationPath, index, moviesToMove.Count);
             }
 
             _logger.ProgressInfo("Finished moving {0} movies to '{1}'", moviesToMove.Count, destinationRootFolder);
+        }
+
+        private string BuildDestinationPath(Movie movie, string destinationRootFolder)
+        {
+            var layout = _rootFolderService.GetFolderLayout(destinationRootFolder);
+
+            if (layout == MovieFolderLayout.Flat)
+            {
+                return destinationRootFolder;
+            }
+
+            if (layout == MovieFolderLayout.Custom)
+            {
+                var customFolder = _filenameBuilder.GetCustomMovieFolder(movie);
+
+                return customFolder.IsNullOrWhiteSpace()
+                    ? destinationRootFolder
+                    : Path.Combine(destinationRootFolder, customFolder);
+            }
+
+            return Path.Combine(destinationRootFolder, _filenameBuilder.GetMovieFolder(movie));
+        }
+
+        private bool ShouldMoveFilesIndividually(Movie movie, string sourcePath)
+        {
+            if (_rootFolderService.GetFolderLayout(sourcePath) == MovieFolderLayout.Flat)
+            {
+                return true;
+            }
+
+            var root = _rootFolderService.GetBestRootFolderPath(sourcePath);
+
+            if (root.IsNotNullOrWhiteSpace() && sourcePath.PathEquals(root))
+            {
+                return true;
+            }
+
+            var paths = _movieService.AllMoviePaths() ?? new Dictionary<int, string>();
+
+            return paths.Any(entry => entry.Key != movie.Id && entry.Value.IsNotNullOrWhiteSpace() && entry.Value.PathEquals(sourcePath));
+        }
+
+        private void MoveMovieFiles(Movie movie, string sourcePath, string destinationPath)
+        {
+            _diskProvider.CreateFolder(destinationPath);
+
+            var files = _mediaFileService.GetFilesByMovie(movie.Id) ?? new List<MovieFile>();
+
+            foreach (var file in files)
+            {
+                if (file.RelativePath.IsNullOrWhiteSpace())
+                {
+                    continue;
+                }
+
+                var from = Path.Combine(sourcePath, file.RelativePath);
+                var to = Path.Combine(destinationPath, Path.GetFileName(file.RelativePath));
+
+                if (!_diskProvider.FileExists(from) || from.PathEquals(to))
+                {
+                    continue;
+                }
+
+                _diskTransferService.TransferFile(from, to, TransferMode.Move);
+                file.RelativePath = destinationPath.GetRelativePath(to);
+                _mediaFileService.Update(file);
+
+                var stem = Path.GetFileNameWithoutExtension(from);
+
+                foreach (var extra in _diskProvider.GetFiles(sourcePath, false) ?? Enumerable.Empty<string>())
+                {
+                    if (MediaFileExtensions.Extensions.Contains(Path.GetExtension(extra)))
+                    {
+                        continue;
+                    }
+
+                    if (!MovieFileLayout.ExtraFileMatchesMovieStem(extra, stem) || !_diskProvider.FileExists(extra))
+                    {
+                        continue;
+                    }
+
+                    var extraDestination = Path.Combine(destinationPath, Path.GetFileName(extra));
+
+                    if (!extra.PathEquals(extraDestination))
+                    {
+                        _diskTransferService.TransferFile(extra, extraDestination, TransferMode.Move);
+                    }
+                }
+            }
         }
     }
 }

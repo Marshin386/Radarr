@@ -28,9 +28,9 @@ class ImportMovieTable extends Component {
     };
 
     unmappedFolders.forEach((unmappedFolder) => {
-      const id = unmappedFolder.name;
+      const id = unmappedFolder.relativePath || unmappedFolder.name;
 
-      onMovieLookup(id, unmappedFolder.path, unmappedFolder.relativePath);
+      onMovieLookup(id, unmappedFolder.path, unmappedFolder.relativePath, unmappedFolder.name);
 
       onSetImportMovieValue({
         id,
