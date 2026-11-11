@@ -67,9 +67,7 @@ COPY distribution/docker/entrypoint.sh /entrypoint.sh
 COPY --from=build /out/bin /app/radarr/bin
 COPY --from=build /out/package_info /app/radarr/package_info
 RUN chmod +x /entrypoint.sh /app/radarr/bin/Radarr \
-    && mkdir -p /config \
-    && useradd -u 1000 -U -d /config -M -s /usr/sbin/nologin radarr \
-    && chown -R radarr:radarr /config
+    && mkdir -p /config
 
 ENV PUID=1000 \
     PGID=1000 \
