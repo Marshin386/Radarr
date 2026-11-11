@@ -27,8 +27,6 @@ RUN case "${TARGETARCH}" in \
         -r "${RID}" \
         --self-contained true \
         -p:EnableAnalyzers=false \
-        -p:DebugType=none \
-        -p:DebugSymbols=false \
         -o /out/bin \
     && cp -a /tmp/UI /out/bin/UI \
     && FORK_VERSION="$(tr -d '[:space:]' < distribution/fork-version)" \
