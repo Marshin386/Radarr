@@ -48,21 +48,24 @@ RUN set -eux; \
     fi; \
     printf 'Acquire::Retries "5";\n' > /etc/apt/apt.conf.d/80-retries; \
     try=0; \
-    until apt-get update; do \
+    while true; do \
+        if apt-get update -o APT::Update::Error-Mode=any \
+            && apt-get install -y --no-install-recommends \
+                ca-certificates \
+                curl \
+                ffmpeg \
+                libsqlite3-0 \
+                mediainfo \
+                tzdata; then \
+            break; \
+        fi; \
         try=$((try + 1)); \
         if [ "${try}" -ge 5 ]; then \
-            echo "apt-get update failed" >&2; \
+            echo "apt-get failed" >&2; \
             exit 1; \
         fi; \
-        sleep 15; \
+        sleep 20; \
     done; \
-    apt-get install -y --no-install-recommends \
-        ca-certificates \
-        curl \
-        ffmpeg \
-        libsqlite3-0 \
-        mediainfo \
-        tzdata; \
     case "${TARGETARCH}" in \
         amd64) gosu_sha=b1892636c281590f34bc63c1118f058cd9de66c4ea463772e3909672d8b302ac ;; \
         arm64) gosu_sha=c216cb762520edb5ab0acb21cb9bc4bcc5f1544d365e8952a21514f04ea233ee ;; \
