@@ -4,7 +4,7 @@
 
 FROM --platform=$BUILDPLATFORM node:24-bookworm AS ui
 WORKDIR /src
-COPY package.json yarn.lock .yarnrc ./
+COPY package.json yarn.lock .yarnrc tsconfig.json ./
 COPY frontend ./frontend
 RUN corepack enable \
     && corepack prepare yarn@1.22.22 --activate \
