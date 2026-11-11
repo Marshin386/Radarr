@@ -183,7 +183,10 @@ const originalTokens = [
 
 interface NamingModalProps {
   isOpen: boolean;
-  name: keyof Pick<NamingConfig, 'standardMovieFormat' | 'movieFolderFormat'>;
+  name: keyof Pick<
+    NamingConfig,
+    'standardMovieFormat' | 'movieFolderFormat' | 'customMovieFolderFormat'
+  >;
   value: string;
   movie?: boolean;
   additional?: boolean;
