@@ -15,7 +15,7 @@ namespace Radarr.Http.Middleware
         public VersionMiddleware(RequestDelegate next)
         {
             _next = next;
-            _version = BuildInfo.Version.ToString();
+            _version = BuildInfo.VersionString;
         }
 
         public async Task InvokeAsync(HttpContext context)

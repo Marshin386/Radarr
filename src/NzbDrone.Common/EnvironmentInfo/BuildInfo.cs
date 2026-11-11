@@ -23,12 +23,28 @@ namespace NzbDrone.Common.EnvironmentInfo
                 Branch = config.Configuration;
             }
 
-            Release = $"{Version}-{Branch}";
+            var informational = attributes.OfType<AssemblyInformationalVersionAttribute>().FirstOrDefault()?.InformationalVersion;
+            if (!string.IsNullOrWhiteSpace(informational))
+            {
+                var plus = informational.IndexOf('+', StringComparison.Ordinal);
+                if (plus >= 0)
+                {
+                    informational = informational.Substring(0, plus);
+                }
+            }
+
+            VersionString = string.IsNullOrWhiteSpace(informational) ? Version.ToString() : informational;
+            Release = $"{VersionString}-{Branch}";
         }
 
         public static string AppName { get; } = "Radarr";
 
         public static Version Version { get; }
+
+        /// <summary>
+        /// User-facing version. Fork builds use the informational version, for example 7.0.3-folders.1.
+        /// </summary>
+        public static string VersionString { get; }
         public static string Branch { get; }
         public static string Release { get; }
 

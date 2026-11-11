@@ -1,0 +1,12 @@
+.git
+.github
+_output
+_temp
+_tests
+_artifacts
+**/bin
+**/obj
+**/node_modules
+frontend/.cache
+*.md
+!docs/custom-folder-layouts.md

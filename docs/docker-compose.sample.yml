@@ -1,0 +1,58 @@
+# Portainer stack for the Marshin386 Radarr fork.
+# Paste this whole file into Portainer → Stacks → Add stack.
+# Name the stack something like radarr-test. Do not edit the stack that runs your real Radarr.
+#
+# Change every /path/to/... line before you deploy.
+# PUID and PGID should be the user and group that own the files (the same IDs as your existing Radarr).
+# TZ is an IANA zone name, for example America/New_York or Europe/London.
+#
+# Back up the copied config first. This image runs database migration 244, and that
+# migration cannot be rolled back. Do not mount the live Radarr config folder, and do
+# not point the official Radarr image at this copy afterward.
+#
+# The container listens on 7878. Host port 7879 keeps it off the existing Radarr port.
+# If the copied config.xml sets Port to something other than 7878, change the right-hand
+# side of the ports mapping to match.
+#
+# The image tag "testing" moves whenever a non-default branch is built. For a frozen
+# test build, use the sha tag printed by the Docker image workflow instead.
+
+services:
+  radarr-test:
+    image: ghcr.io/marshin386/radarr:testing
+    container_name: radarr-test
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=Etc/UTC
+      # - UMASK=022
+    ports:
+      - "7879:7878"
+    volumes:
+      # Copy of the existing config directory (the folder that contains config.xml and radarr.db).
+      - /path/to/radarr-test/config:/config
+      # Movie library. Read-only so a rename or delete in the test UI cannot change files.
+      - /path/to/movies:/movies:ro
+      # Download client folder. Writable so you can try an import. Add :ro to keep it read-only.
+      - /path/to/downloads:/downloads
+    restart: unless-stopped
+
+  # Production variant. Leave these lines commented while radarr-test is running.
+  # Comment out radarr-test before uncommenting this service. Do not reuse the test
+  # container name, host port, or config folder, and do not reuse your current Radarr's.
+  # Pin a version tag from a git tag (docs/FORK.md). Do not use :testing for a library you keep.
+  #
+  # radarr:
+  #   image: ghcr.io/marshin386/radarr:v7.0.3-folders.1
+  #   container_name: radarr
+  #   environment:
+  #     - PUID=1000
+  #     - PGID=1000
+  #     - TZ=Etc/UTC
+  #   ports:
+  #     - "7878:7878"
+  #   volumes:
+  #     - /path/to/radarr/config:/config
+  #     - /path/to/movies:/movies
+  #     - /path/to/downloads:/downloads
+  #   restart: unless-stopped

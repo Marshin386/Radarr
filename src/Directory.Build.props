@@ -78,8 +78,12 @@
     <AssemblyConfiguration>$(Configuration)-dev</AssemblyConfiguration>
     <NeutralLanguage>en</NeutralLanguage>
 
+    <!-- Fork display version. AssemblyVersion stays numeric; this string is what About and initialize.json show. -->
+    <InformationalVersion>$([System.IO.File]::ReadAllText('$(MSBuildThisFileDirectory)../distribution/fork-version').Trim())</InformationalVersion>
+    <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
+
     <GenerateAssemblyFileVersionAttribute>false</GenerateAssemblyFileVersionAttribute>
-    <GenerateAssemblyInformationalVersionAttribute>false</GenerateAssemblyInformationalVersionAttribute>
+    <GenerateAssemblyInformationalVersionAttribute>true</GenerateAssemblyInformationalVersionAttribute>
     <GenerateAssemblyConfigurationAttribute>false</GenerateAssemblyConfigurationAttribute>
     
     <Deterministic Condition="$(AssemblyVersion.EndsWith('*'))">False</Deterministic>
