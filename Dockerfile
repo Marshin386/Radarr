@@ -41,10 +41,21 @@ ARG TARGETARCH
 ARG GOSU_VERSION=1.20
 RUN set -eux; \
     if [ -f /etc/apt/sources.list.d/ubuntu.sources ]; then \
-        sed -i 's/^Components: .*/Components: main universe/' /etc/apt/sources.list.d/ubuntu.sources; \
+        sed -i -E 's/^([[:space:]]*Components:).*/\1 main universe/' /etc/apt/sources.list.d/ubuntu.sources; \
+    fi; \
+    if [ -f /etc/apt/sources.list ]; then \
+        sed -i -E 's/[[:space:]]main$/ main universe/' /etc/apt/sources.list; \
     fi; \
     printf 'Acquire::Retries "5";\n' > /etc/apt/apt.conf.d/80-retries; \
-    apt-get update; \
+    try=0; \
+    until apt-get update; do \
+        try=$((try + 1)); \
+        if [ "${try}" -ge 5 ]; then \
+            echo "apt-get update failed" >&2; \
+            exit 1; \
+        fi; \
+        sleep 15; \
+    done; \
     apt-get install -y --no-install-recommends \
         ca-certificates \
         curl \
