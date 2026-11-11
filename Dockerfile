@@ -38,16 +38,31 @@ RUN case "${TARGETARCH}" in \
 
 FROM mcr.microsoft.com/dotnet/runtime-deps:10.0
 ARG TARGETARCH
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends \
+# gosu is not in Ubuntu main. Pin the upstream binary and check its checksum.
+ARG GOSU_VERSION=1.20
+RUN set -eux; \
+    if [ -f /etc/apt/sources.list.d/ubuntu.sources ]; then \
+        sed -i 's/^Components: .*/Components: main universe/' /etc/apt/sources.list.d/ubuntu.sources; \
+    fi; \
+    printf 'Acquire::Retries "5";\n' > /etc/apt/apt.conf.d/80-retries; \
+    apt-get update; \
+    apt-get install -y --no-install-recommends \
         ca-certificates \
         curl \
         ffmpeg \
-        gosu \
         libsqlite3-0 \
         mediainfo \
-        tzdata \
-    && rm -rf /var/lib/apt/lists/*
+        tzdata; \
+    case "${TARGETARCH}" in \
+        amd64) gosu_sha=b1892636c281590f34bc63c1118f058cd9de66c4ea463772e3909672d8b302ac ;; \
+        arm64) gosu_sha=c216cb762520edb5ab0acb21cb9bc4bcc5f1544d365e8952a21514f04ea233ee ;; \
+        *) echo "Unsupported TARGETARCH=${TARGETARCH}" >&2; exit 1 ;; \
+    esac; \
+    curl -fsSL -o /usr/local/bin/gosu "https://github.com/tianon/gosu/releases/download/${GOSU_VERSION}/gosu-${TARGETARCH}"; \
+    echo "${gosu_sha}  /usr/local/bin/gosu" | sha256sum -c -; \
+    chmod 0755 /usr/local/bin/gosu; \
+    gosu --version; \
+    rm -rf /var/lib/apt/lists/*
 
 COPY distribution/docker/entrypoint.sh /entrypoint.sh
 COPY --from=build /out/bin /app/radarr/bin
