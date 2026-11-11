@@ -23,6 +23,7 @@ RUN case "${TARGETARCH}" in \
     esac \
     && dotnet publish src/NzbDrone.Console/Radarr.Console.csproj \
         -c Release \
+        -f net10.0 \
         -r "${RID}" \
         --self-contained true \
         -p:EnableAnalyzers=false \
