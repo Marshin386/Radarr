@@ -40,6 +40,7 @@ ARG TARGETARCH
 # gosu is not in Ubuntu main. Pin the upstream binary and check its checksum.
 ARG GOSU_VERSION=1.20
 RUN set -eux; \
+    printf 'nameserver 8.8.8.8\nnameserver 1.1.1.1\n' > /etc/resolv.conf || true; \
     if [ -f /etc/apt/sources.list.d/ubuntu.sources ]; then \
         sed -i -E 's/^([[:space:]]*Components:).*/\1 main universe/' /etc/apt/sources.list.d/ubuntu.sources; \
     fi; \
