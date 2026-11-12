@@ -79,7 +79,7 @@ jobs:
           cache-to: type=gha,mode=max
 
       - name: Smoke test amd64 image
-        run: sh distribution/docker/smoke-test.sh radarr:smoke
+        run: sh distribution/docker/smoke-test.sh radarr:smoke "${{ steps.version.outputs.value }}"
 
       - name: Build and push
         uses: docker/build-push-action@v6

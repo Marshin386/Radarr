@@ -1,11 +1,17 @@
 #!/bin/sh
-# Start a locally loaded image and fail unless /ping returns OK and the
-# Linux platform assembly is present. Used by the Docker workflow.
+# Start a locally loaded image and fail unless /ping returns OK, the Linux
+# platform assembly is present, and /api/v3/system/status reports the fork version.
 set -eu
 
 image="${1:-radarr:smoke}"
+expected="${2:-}"
 name=radarr-smoke
 log=/tmp/radarr-smoke.log
+
+if [ -z "${expected}" ]; then
+    echo 'expected fork version is required' >&2
+    exit 1
+fi
 
 docker rm -f "${name}" >/dev/null 2>&1 || true
 docker run -d --name "${name}" -p 7878:7878 -e PUID=1000 -e PGID=1000 "${image}"
@@ -35,10 +41,34 @@ if ! curl -fsS http://127.0.0.1:7878/ping | grep -q '"status":"OK"'; then
     exit 1
 fi
 
+api_key="$(docker exec "${name}" sed -n 's:.*<ApiKey>\([^<]*\)</ApiKey>.*:\1:p' /config/config.xml)"
+if [ -z "${api_key}" ]; then
+    echo 'could not read the API key from /config/config.xml' >&2
+    exit 1
+fi
+
+status="$(curl -fsS -H "X-Api-Key: ${api_key}" http://127.0.0.1:7878/api/v3/system/status)"
+echo "system status: ${status}"
+
+if ! printf '%s' "${status}" | grep -Eq "\"version\": *\"${expected}\""; then
+    echo "system status version is not ${expected}" >&2
+    exit 1
+fi
+
+if ! printf '%s' "${status}" | grep -Eq "\"packageVersion\": *\"${expected}\""; then
+    echo "system status packageVersion is not ${expected}" >&2
+    exit 1
+fi
+
 docker logs "${name}" > "${log}" 2>&1 || true
 if grep -E 'Could not load file or assembly|FileNotFoundException|DllNotFoundException' "${log}"; then
     echo 'Radarr log contains a missing-assembly error' >&2
     exit 1
 fi
 
-echo 'smoke test passed: /ping returned OK and Radarr.Mono.dll is present'
+if ! grep -q "Version ${expected}" "${log}"; then
+    echo "startup log did not report Version ${expected}" >&2
+    exit 1
+fi
+
+echo "smoke test passed: /ping returned OK and /api/v3/system/status version is ${expected}"

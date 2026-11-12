@@ -16,24 +16,44 @@ ARG TARGETARCH
 WORKDIR /src
 COPY . .
 COPY --from=ui /src/_output/UI /tmp/UI
-RUN case "${TARGETARCH}" in \
+# Upstream build.sh replaces AssemblyVersion (the 10.0.0.* dev placeholder) before
+# publish. System.Version cannot store 7.0.3-folders.1, so the numeric assembly
+# version is 7.0.3.1 and InformationalVersion carries the fork string the UI shows.
+RUN set -eu; \
+    FORK_VERSION="$(tr -d '[:space:]' < distribution/fork-version)"; \
+    ASSEMBLY_VERSION="$(printf '%s\n' "${FORK_VERSION}" | sed -nE 's/^([0-9]+\.[0-9]+\.[0-9]+)-[A-Za-z0-9]+\.([0-9]+)$/\1.\2/p')"; \
+    if [ -z "${ASSEMBLY_VERSION}" ]; then \
+        echo "distribution/fork-version must look like 7.0.3-folders.1" >&2; \
+        exit 1; \
+    fi; \
+    case "${TARGETARCH}" in \
         amd64) RID=linux-x64 ;; \
         arm64) RID=linux-arm64 ;; \
         *) echo "Unsupported TARGETARCH=${TARGETARCH}" >&2; exit 1 ;; \
-    esac \
-    && dotnet publish src/NzbDrone.Console/Radarr.Console.csproj \
+    esac; \
+    dotnet publish src/NzbDrone.Console/Radarr.Console.csproj \
         -c Release \
         -f net10.0 \
         -r "${RID}" \
         --self-contained true \
         -p:EnableAnalyzers=false \
-        -o /out/bin \
-    && dotnet publish src/NzbDrone.Mono/Radarr.Mono.csproj \
+        -p:AssemblyVersion="${ASSEMBLY_VERSION}" \
+        -p:FileVersion="${ASSEMBLY_VERSION}" \
+        -p:Version="${ASSEMBLY_VERSION}" \
+        -p:InformationalVersion="${FORK_VERSION}" \
+        -p:IncludeSourceRevisionInInformationalVersion=false \
+        -o /out/bin; \
+    dotnet publish src/NzbDrone.Mono/Radarr.Mono.csproj \
         -c Release \
         -f net10.0 \
         -r "${RID}" \
         --self-contained true \
         -p:EnableAnalyzers=false \
+        -p:AssemblyVersion="${ASSEMBLY_VERSION}" \
+        -p:FileVersion="${ASSEMBLY_VERSION}" \
+        -p:Version="${ASSEMBLY_VERSION}" \
+        -p:InformationalVersion="${FORK_VERSION}" \
+        -p:IncludeSourceRevisionInInformationalVersion=false \
         -o /tmp/mono \
     && find /tmp/mono -maxdepth 1 \( \
         -name 'Radarr.Mono.dll' -o \
@@ -44,7 +64,6 @@ RUN case "${TARGETARCH}" in \
        \) -exec cp -a {} /out/bin/ \; \
     && test -s /out/bin/Radarr.Mono.dll \
     && cp -a /tmp/UI /out/bin/UI \
-    && FORK_VERSION="$(tr -d '[:space:]' < distribution/fork-version)" \
     && printf 'ReleaseVersion=%s\n' "${FORK_VERSION}" > /out/bin/release_info \
     && printf 'PackageVersion=%s\nPackageAuthor=Marshin386\nUpdateMethod=Docker\nPackageGlobalMessage=Marshin386 Radarr fork %s (custom folder layouts). Updates are delivered by replacing this image.\n' \
         "${FORK_VERSION}" "${FORK_VERSION}" > /out/package_info \

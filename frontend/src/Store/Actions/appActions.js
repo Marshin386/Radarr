@@ -24,6 +24,7 @@ function getDimensions(width, height) {
 // Variables
 
 export const section = 'app';
+export const DISMISSED_UPDATE_VERSION_KEY = 'radarr.dismissedUpdateVersion';
 const messagesSection = 'app.messages';
 let abortPingServer = null;
 let pingTimeout = null;
@@ -77,6 +78,18 @@ export const fetchTranslations = createThunk(FETCH_TRANSLATIONS);
 
 //
 // Helpers
+
+function isDismissedUpdateVersion(version) {
+  try {
+    if (typeof window === 'undefined' || !window.localStorage) {
+      return false;
+    }
+
+    return window.localStorage.getItem(DISMISSED_UPDATE_VERSION_KEY) === version;
+  } catch (e) {
+    return false;
+  }
+}
 
 function pingServerAfterTimeout(getState, dispatch) {
   if (abortPingServer) {
@@ -205,7 +218,7 @@ export const reducers = createHandleActions({
       version
     };
 
-    if (state.version !== version) {
+    if (state.version !== version && !isDismissedUpdateVersion(version)) {
       if (!state.prevVersion) {
         newState.prevVersion = state.version;
       }
