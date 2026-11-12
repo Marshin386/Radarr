@@ -81,7 +81,7 @@ created="$(curl -fsS -H "X-Api-Key: ${api_key}" -H 'Content-Type: application/js
 echo "created root folder: ${created}"
 
 RADARR_API_KEY="${api_key}" python3 - <<'PY'
-import json, os, urllib.request
+import json, os, urllib.error, urllib.request
 base = "http://127.0.0.1:7878"
 key = os.environ["RADARR_API_KEY"]
 
@@ -97,9 +97,13 @@ def call(method, path, body=None):
             "Accept": "application/json",
         },
     )
-    with urllib.request.urlopen(req) as resp:
-        raw = resp.read().decode()
-        return json.loads(raw) if raw else None
+    try:
+        with urllib.request.urlopen(req) as resp:
+            raw = resp.read().decode()
+            return json.loads(raw) if raw else None
+    except urllib.error.HTTPError as error:
+        detail = error.read().decode(errors="replace")
+        raise SystemExit("%s %s failed: %s %s" % (method, path, error.code, detail))
 
 naming = call("GET", "/api/v3/config/naming")
 naming["folderLayout"] = "flat"
@@ -116,7 +120,6 @@ naming["folderLayout"] = "movieFolder"
 call("PUT", "/api/v3/config/naming/%s" % naming["id"], naming)
 host = call("GET", "/api/v3/config/host")
 host["authenticationMethod"] = "forms"
-host["authenticationRequired"] = "disabledForLocalAddresses"
 host["username"] = "radarr"
 host["password"] = "radarr-test"
 host["passwordConfirmation"] = "radarr-test"
