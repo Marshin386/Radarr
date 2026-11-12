@@ -67,6 +67,20 @@ jobs:
             org.opencontainers.image.version=${{ steps.version.outputs.value }}
             org.opencontainers.image.source=https://github.com/Marshin386/Radarr
 
+      - name: Build amd64 image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64
+          load: true
+          provenance: false
+          tags: radarr:smoke
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Smoke test amd64 image
+        run: sh distribution/docker/smoke-test.sh radarr:smoke
+
       - name: Build and push
         uses: docker/build-push-action@v6
         with:

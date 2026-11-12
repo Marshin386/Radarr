@@ -28,6 +28,21 @@ RUN case "${TARGETARCH}" in \
         --self-contained true \
         -p:EnableAnalyzers=false \
         -o /out/bin \
+    && dotnet publish src/NzbDrone.Mono/Radarr.Mono.csproj \
+        -c Release \
+        -f net10.0 \
+        -r "${RID}" \
+        --self-contained true \
+        -p:EnableAnalyzers=false \
+        -o /tmp/mono \
+    && find /tmp/mono -maxdepth 1 \( \
+        -name 'Radarr.Mono.dll' -o \
+        -name 'Radarr.Mono.pdb' -o \
+        -name 'Openur.Mono.Unix.*' -o \
+        -name 'libMono.Unix.*' -o \
+        -name 'Mono.Unix.*' \
+       \) -exec cp -a {} /out/bin/ \; \
+    && test -s /out/bin/Radarr.Mono.dll \
     && cp -a /tmp/UI /out/bin/UI \
     && FORK_VERSION="$(tr -d '[:space:]' < distribution/fork-version)" \
     && printf 'ReleaseVersion=%s\n' "${FORK_VERSION}" > /out/bin/release_info \
