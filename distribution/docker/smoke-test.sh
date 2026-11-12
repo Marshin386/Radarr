@@ -76,25 +76,59 @@ docker exec "${name}" mkdir -p "${flat}"
 docker exec "${name}" chown radarr:radarr "${flat}"
 
 created="$(curl -fsS -H "X-Api-Key: ${api_key}" -H 'Content-Type: application/json' \
-    -d "{\"path\":\"${flat}\",\"folderLayout\":\"movieFolder\"}" \
+    -d "{\"path\":\"${flat}\"}" \
     http://127.0.0.1:7878/api/v3/rootfolder)"
 echo "created root folder: ${created}"
-root_id="$(printf '%s' "${created}" | sed -n 's/.*"id": *\([0-9][0-9]*\).*/\1/p')"
-if [ -z "${root_id}" ]; then
-    echo 'creating a root folder did not return an id' >&2
+
+RADARR_API_KEY="${api_key}" python3 - <<'PY'
+import json, os, urllib.request
+base = "http://127.0.0.1:7878"
+key = os.environ["RADARR_API_KEY"]
+
+def call(method, path, body=None):
+    data = None if body is None else json.dumps(body).encode()
+    req = urllib.request.Request(
+        base + path,
+        data=data,
+        method=method,
+        headers={
+            "X-Api-Key": key,
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+        },
+    )
+    with urllib.request.urlopen(req) as resp:
+        raw = resp.read().decode()
+        return json.loads(raw) if raw else None
+
+naming = call("GET", "/api/v3/config/naming")
+naming["folderLayout"] = "flat"
+call("PUT", "/api/v3/config/naming/%s" % naming["id"], naming)
+saved = call("GET", "/api/v3/config/naming")
+print("naming after save:", saved.get("folderLayout"))
+if saved.get("folderLayout") != "flat":
+    raise SystemExit("naming folderLayout did not persist")
+roots = call("GET", "/api/v3/rootfolder")
+print("roots after naming save:", roots)
+if not roots or roots[0].get("folderLayout") != "flat":
+    raise SystemExit("library structure was not copied onto the root folder")
+naming["folderLayout"] = "movieFolder"
+call("PUT", "/api/v3/config/naming/%s" % naming["id"], naming)
+host = call("GET", "/api/v3/config/host")
+host["authenticationMethod"] = "forms"
+host["authenticationRequired"] = "disabledForLocalAddresses"
+host["username"] = "radarr"
+host["password"] = "radarr-test"
+host["passwordConfirmation"] = "radarr-test"
+call("PUT", "/api/v3/config/host/%s" % host["id"], host)
+print("forms auth configured for the UI check")
+PY
+
+if [ ! -d "${NODE_PATH:-}/playwright" ]; then
+    echo 'Playwright is not installed; the Library Structure UI check cannot run' >&2
     exit 1
 fi
 
-updated="$(curl -fsS -X PUT -H "X-Api-Key: ${api_key}" -H 'Content-Type: application/json' \
-    -d "{\"id\":${root_id},\"path\":\"${flat}\",\"folderLayout\":\"flat\"}" \
-    "http://127.0.0.1:7878/api/v3/rootfolder/${root_id}")"
-echo "updated root folder: ${updated}"
+node distribution/docker/library-structure-ui.cjs
 
-read_back="$(curl -fsS -H "X-Api-Key: ${api_key}" "http://127.0.0.1:7878/api/v3/rootfolder/${root_id}")"
-echo "root folder read back: ${read_back}"
-if ! printf '%s' "${read_back}" | grep -Eq '"folderLayout": *"flat"'; then
-    echo 'root folder layout was not saved as flat' >&2
-    exit 1
-fi
-
-echo "smoke test passed: /ping returned OK, version is ${expected}, and a root folder layout updated to flat"
+echo "smoke test passed: /ping returned OK, version is ${expected}, and Library Structure saved in the UI"

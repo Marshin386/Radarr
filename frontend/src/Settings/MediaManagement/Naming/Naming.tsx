@@ -29,12 +29,10 @@ const SECTION = 'naming';
 
 function createNamingSelector() {
   return createSelector(
-    (state: AppState) => state.settings.advancedSettings,
     (state: AppState) => state.settings.namingExamples,
     createSettingsSectionSelector(SECTION),
-    (advancedSettings, namingExamples, sectionSettings) => {
+    (namingExamples, sectionSettings) => {
       return {
-        advancedSettings,
         examples: namingExamples.item,
         examplesPopulated: namingExamples.isPopulated,
         ...sectionSettings,
@@ -54,7 +52,6 @@ interface NamingModalOptions {
 
 function Naming() {
   const {
-    advancedSettings,
     isFetching,
     error,
     settings,
@@ -125,6 +122,16 @@ function Naming() {
   const renameMovies = hasSettings && settings.renameMovies.value;
   const replaceIllegalCharacters =
     hasSettings && settings.replaceIllegalCharacters.value;
+
+  const libraryStructure = settings.folderLayout?.value || 'movieFolder';
+  const libraryStructureOptions = [
+    {
+      key: 'movieFolder',
+      value: translate('MovieFolderLayoutMovieFolder'),
+    },
+    { key: 'flat', value: translate('MovieFolderLayoutFlat') },
+    { key: 'custom', value: translate('MovieFolderLayoutCustom') },
+  ];
 
   const colonReplacementOptions = [
     { key: 'delete', value: translate('Delete') },
@@ -248,11 +255,20 @@ function Naming() {
             </FormGroup>
           ) : null}
 
-          <FormGroup
-            advancedSettings={advancedSettings}
-            isAdvanced={true}
-            size={sizes.MEDIUM}
-          >
+          <FormGroup size={sizes.MEDIUM} data-testid="library-structure">
+            <FormLabel>{translate('LibraryStructure')}</FormLabel>
+
+            <FormInputGroup
+              type={inputTypes.SELECT}
+              name="folderLayout"
+              values={libraryStructureOptions}
+              helpText={translate('LibraryStructureHelpText')}
+              onChange={handleInputChange}
+              {...settings.folderLayout}
+            />
+          </FormGroup>
+
+          <FormGroup size={sizes.MEDIUM}>
             <FormLabel>{translate('MovieFolderFormat')}</FormLabel>
 
             <FormInputGroup
@@ -260,12 +276,16 @@ function Naming() {
               type={inputTypes.TEXT}
               name="movieFolderFormat"
               buttons={
-                <FormInputButton onPress={onMovieFolderNamingModalOpenClick}>
+                <FormInputButton
+                  onPress={onMovieFolderNamingModalOpenClick}
+                  isDisabled={libraryStructure !== 'movieFolder'}
+                >
                   ?
                 </FormInputButton>
               }
               onChange={handleInputChange}
               {...settings.movieFolderFormat}
+              isDisabled={libraryStructure !== 'movieFolder'}
               helpTexts={[
                 translate('MovieFolderFormatHelpText'),
                 ...movieFolderFormatHelpTexts,
@@ -281,7 +301,7 @@ function Naming() {
           </FormGroup>
 
           {settings.customMovieFolderFormat ? (
-            <FormGroup advancedSettings={advancedSettings} isAdvanced={true}>
+            <FormGroup>
               <FormLabel>{translate('CustomMovieFolderFormat')}</FormLabel>
 
               <FormInputGroup
@@ -291,12 +311,14 @@ function Naming() {
                 buttons={
                   <FormInputButton
                     onPress={onCustomMovieFolderNamingModalOpenClick}
+                    isDisabled={libraryStructure !== 'custom'}
                   >
                     ?
                   </FormInputButton>
                 }
                 onChange={handleInputChange}
                 {...settings.customMovieFolderFormat}
+                isDisabled={libraryStructure !== 'custom'}
                 helpTexts={[
                   translate('CustomMovieFolderFormatHelpText'),
                   ...customMovieFolderFormatHelpTexts,

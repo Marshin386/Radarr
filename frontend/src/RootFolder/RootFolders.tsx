@@ -23,11 +23,6 @@ const rootFolderColumns: Column[] = [
     isVisible: true,
   },
   {
-    name: 'folderLayout',
-    label: () => translate('MovieFolderLayout'),
-    isVisible: true,
-  },
-  {
     name: 'unmappedFolders',
     label: () => translate('UnmappedFolders'),
     isVisible: true,
@@ -40,7 +35,7 @@ const rootFolderColumns: Column[] = [
 ];
 
 function RootFolders() {
-  const { isFetching, isPopulated, error, items, pendingChanges } = useSelector(
+  const { isFetching, isPopulated, error, items } = useSelector(
     createRootFoldersSelector()
   );
 
@@ -69,8 +64,6 @@ function RootFolders() {
               key={rootFolder.id}
               id={rootFolder.id}
               path={rootFolder.path}
-              folderLayout={rootFolder.folderLayout}
-              pendingLayout={pendingChanges?.[String(rootFolder.id)]}
               accessible={rootFolder.accessible}
               freeSpace={rootFolder.freeSpace}
               unmappedFolders={rootFolder.unmappedFolders}

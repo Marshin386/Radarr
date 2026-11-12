@@ -34,8 +34,8 @@ namespace NzbDrone.Core.Validation.Paths
                 return true;
             }
 
-            // Flat and custom movies are stored in the root, or in a folder that can be the root.
-            return match.FolderLayout != MovieFolderLayout.MovieFolder;
+            // Flat and custom movies are stored in the root. Movie-folder libraries are not.
+            return _rootFolderService.GetFolderLayout(path) != MovieFolderLayout.MovieFolder;
         }
     }
 }

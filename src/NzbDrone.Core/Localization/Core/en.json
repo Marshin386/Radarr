@@ -1168,6 +1168,8 @@
   "MovieFolderLayoutCustom": "Custom nested folders",
   "MovieFolderLayoutFlat": "Flat folder",
   "MovieFolderLayoutHelpText": "Movie folder keeps one folder per movie. Flat puts every movie file directly in this root. Custom imports movies from any nested folder and uses the custom folder format for new movies.",
+  "LibraryStructure": "Library Structure",
+  "LibraryStructureHelpText": "How movies are stored in every root folder. Movie folder keeps one folder per movie. Flat puts every file directly in the root. Custom imports nested folders and uses the custom folder format for new movies.",
   "MovieFolderLayoutMovieFolder": "Movie folder",
   "MovieFolderLayoutChange": "Change Folder Layout",
   "MovieFolderLayoutChangeMessage": "Existing movies in {path} keep the folders they already use. New movies, imports, and moves into this root use the layout you selected. Save Media Management to keep the change.",

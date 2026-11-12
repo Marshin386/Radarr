@@ -337,6 +337,8 @@ namespace NzbDrone.Core.Test.RootFolderTests
                 .Setup(repository => repository.AllMoviePaths())
                 .Returns(new Dictionary<int, string>());
 
+            _namingConfig.FolderLayout = MovieFolderLayout.Flat;
+
             Mocker.GetMock<IDiskProvider>()
                 .Setup(disk => disk.GetFiles(rootFolderPath, false))
                 .Returns(files);
@@ -375,6 +377,8 @@ namespace NzbDrone.Core.Test.RootFolderTests
                 .Setup(repository => repository.AllMoviePaths())
                 .Returns(new Dictionary<int, string>());
 
+            _namingConfig.FolderLayout = MovieFolderLayout.Custom;
+
             Mocker.GetMock<IDiskProvider>()
                 .Setup(disk => disk.GetFiles(rootFolderPath, true))
                 .Returns(new[] { ironMan, heat });
@@ -409,6 +413,42 @@ namespace NzbDrone.Core.Test.RootFolderTests
             stored.FolderLayout.Should().Be(MovieFolderLayout.Flat);
             Mocker.GetMock<IRootFolderRepository>()
                 .Verify(repository => repository.SetFields(stored, It.IsAny<Expression<Func<RootFolder, object>>[]>()), Times.Once());
+        }
+
+        [Test]
+        public void should_read_library_structure_from_naming_config()
+        {
+            var root = @"C:\Movies".AsOsAgnostic();
+
+            Mocker.GetMock<IRootFolderRepository>()
+                .Setup(repository => repository.All())
+                .Returns(new List<RootFolder>
+                {
+                    new RootFolder { Path = root, FolderLayout = MovieFolderLayout.MovieFolder }
+                });
+
+            _namingConfig.FolderLayout = MovieFolderLayout.Flat;
+
+            Subject.GetFolderLayout(root).Should().Be(MovieFolderLayout.Flat);
+        }
+
+        [Test]
+        public void should_copy_library_structure_onto_every_root()
+        {
+            var stored = new RootFolder
+            {
+                Id = 1,
+                Path = @"C:\Movies".AsOsAgnostic(),
+                FolderLayout = MovieFolderLayout.MovieFolder
+            };
+
+            Mocker.GetMock<IRootFolderRepository>()
+                .Setup(repository => repository.All())
+                .Returns(new List<RootFolder> { stored });
+
+            Subject.ApplyLibraryLayout(MovieFolderLayout.Flat);
+
+            stored.FolderLayout.Should().Be(MovieFolderLayout.Flat);
         }
     }
 }

@@ -12,4 +12,5 @@ export default interface NamingConfig {
   standardMovieFormat: string;
   movieFolderFormat: string;
   customMovieFolderFormat: string;
+  folderLayout: 'movieFolder' | 'flat' | 'custom';
 }

@@ -22,7 +22,8 @@ namespace Radarr.Api.V3.Config
                 ColonReplacementFormat = model.ColonReplacementFormat,
                 StandardMovieFormat = model.StandardMovieFormat,
                 MovieFolderFormat = model.MovieFolderFormat,
-                CustomMovieFolderFormat = model.CustomMovieFolderFormat
+                CustomMovieFolderFormat = model.CustomMovieFolderFormat,
+                FolderLayout = model.FolderLayout
             };
         }
 
@@ -37,7 +38,8 @@ namespace Radarr.Api.V3.Config
                 ColonReplacementFormat = resource.ColonReplacementFormat,
                 StandardMovieFormat = resource.StandardMovieFormat,
                 MovieFolderFormat = resource.MovieFolderFormat,
-                CustomMovieFolderFormat = resource.CustomMovieFolderFormat
+                CustomMovieFolderFormat = resource.CustomMovieFolderFormat,
+                FolderLayout = resource.FolderLayout
             };
         }
     }

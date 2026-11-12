@@ -33,6 +33,10 @@ namespace NzbDrone.Core.Test.ValidationTests
                 {
                     new RootFolder { Id = 1, Path = _root, FolderLayout = layout }
                 });
+
+            Mocker.GetMock<IRootFolderService>()
+                .Setup(service => service.GetFolderLayout(_root))
+                .Returns(layout);
         }
 
         [Test]

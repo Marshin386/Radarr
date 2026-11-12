@@ -7,6 +7,7 @@ using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Mvc;
 using NzbDrone.Common.Extensions;
 using NzbDrone.Core.Organizer;
+using NzbDrone.Core.RootFolders;
 using Radarr.Http;
 using Radarr.Http.REST;
 using Radarr.Http.REST.Attributes;
@@ -19,14 +20,17 @@ namespace Radarr.Api.V3.Config
         private readonly INamingConfigService _namingConfigService;
         private readonly IFilenameSampleService _filenameSampleService;
         private readonly IFilenameValidationService _filenameValidationService;
+        private readonly IRootFolderService _rootFolderService;
 
         public NamingConfigController(INamingConfigService namingConfigService,
                                   IFilenameSampleService filenameSampleService,
-                                  IFilenameValidationService filenameValidationService)
+                                  IFilenameValidationService filenameValidationService,
+                                  IRootFolderService rootFolderService)
         {
             _namingConfigService = namingConfigService;
             _filenameSampleService = filenameSampleService;
             _filenameValidationService = filenameValidationService;
+            _rootFolderService = rootFolderService;
 
             SharedValidator.RuleFor(c => c.StandardMovieFormat).ValidMovieFormat();
             SharedValidator.RuleFor(c => c.MovieFolderFormat).ValidMovieFolderFormat();
@@ -53,6 +57,7 @@ namespace Radarr.Api.V3.Config
             ValidateFormatResult(nameSpec);
 
             _namingConfigService.Save(nameSpec);
+            _rootFolderService.ApplyLibraryLayout(nameSpec.FolderLayout);
 
             return Accepted(resource.Id);
         }

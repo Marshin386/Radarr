@@ -25,6 +25,7 @@ namespace NzbDrone.Core.RootFolders
         RootFolder Get(int id, bool timeout);
         string GetBestRootFolderPath(string path, List<RootFolder> rootFolders = null);
         MovieFolderLayout GetFolderLayout(string path);
+        void ApplyLibraryLayout(MovieFolderLayout layout);
     }
 
     public class RootFolderService : IRootFolderService
@@ -130,6 +131,8 @@ namespace NzbDrone.Core.RootFolders
                 throw new UnauthorizedAccessException($"Root folder path '{rootFolder.Path}' is not writable by user '{Environment.UserName}'");
             }
 
+            rootFolder.FolderLayout = _namingConfigService.GetConfig().FolderLayout;
+
             _rootFolderRepository.Insert(rootFolder);
 
             var moviePaths = _movieRepository.AllMoviePaths();
@@ -149,6 +152,22 @@ namespace NzbDrone.Core.RootFolders
             _cache.Clear();
 
             return existing;
+        }
+
+        public void ApplyLibraryLayout(MovieFolderLayout layout)
+        {
+            foreach (var root in _rootFolderRepository.All().ToList())
+            {
+                if (root.FolderLayout == layout)
+                {
+                    continue;
+                }
+
+                root.FolderLayout = layout;
+                _rootFolderRepository.SetFields(root, folder => folder.FolderLayout);
+            }
+
+            _cache.Clear();
         }
 
         public void Remove(int id)
@@ -246,7 +265,13 @@ namespace NzbDrone.Core.RootFolders
                 .Where(root => root.Path.PathEquals(path) || root.Path.IsParentPath(path))
                 .MaxBy(root => root.Path.Length);
 
-            return match?.FolderLayout ?? MovieFolderLayout.MovieFolder;
+            if (match == null)
+            {
+                return MovieFolderLayout.MovieFolder;
+            }
+
+            // One library structure for every root. The column is kept in sync when the setting is saved.
+            return _namingConfigService.GetConfig().FolderLayout;
         }
 
         private void GetDetails(RootFolder rootFolder, Dictionary<int, string> moviePaths, bool timeout)

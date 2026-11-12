@@ -17,11 +17,6 @@ import RootFolders from 'RootFolder/RootFolders';
 import SettingsToolbar from 'Settings/SettingsToolbar';
 import { clearPendingChanges } from 'Store/Actions/baseActions';
 import {
-  clearRootFolderPending,
-  saveRootFolders,
-} from 'Store/Actions/rootFolderActions';
-import createRootFoldersSelector from 'Store/Selectors/createRootFoldersSelector';
-import {
   fetchMediaManagementSettings,
   saveMediaManagementSettings,
   saveNamingSettings,
@@ -106,11 +101,6 @@ function MediaManagement() {
   const hasNamingPendingChanges = !isEmpty(
     useSelector((state: AppState) => state.settings.naming.pendingChanges)
   );
-  const {
-    isSaving: isSavingRootFolders,
-    pendingChanges: rootFolderPendingChanges,
-  } = useSelector(createRootFoldersSelector());
-  const hasRootFolderPendingChanges = !isEmpty(rootFolderPendingChanges);
   const isWindows = useIsWindows();
   const {
     isFetching,
@@ -127,7 +117,6 @@ function MediaManagement() {
   const handleSavePress = useCallback(() => {
     dispatch(saveMediaManagementSettings());
     dispatch(saveNamingSettings());
-    dispatch(saveRootFolders());
   }, [dispatch]);
 
   const handleInputChange = useCallback(
@@ -143,19 +132,14 @@ function MediaManagement() {
 
     return () => {
       dispatch(clearPendingChanges({ section: `settings.${SECTION}` }));
-      dispatch(clearRootFolderPending());
     };
   }, [dispatch]);
 
   return (
     <PageContent title={translate('MediaManagementSettings')}>
       <SettingsToolbar
-        isSaving={isSaving || isSavingRootFolders}
-        hasPendingChanges={
-          hasNamingPendingChanges ||
-          hasPendingChanges ||
-          hasRootFolderPendingChanges
-        }
+        isSaving={isSaving}
+        hasPendingChanges={hasNamingPendingChanges || hasPendingChanges}
         onSavePress={handleSavePress}
       />
 

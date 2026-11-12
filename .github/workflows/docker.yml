@@ -78,8 +78,23 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+      - name: Install Playwright
+        run: |
+          npm install --prefix /tmp/pw playwright@1.49.1
+          cd /tmp/pw && npx playwright install --with-deps chromium
+
       - name: Smoke test amd64 image
+        env:
+          NODE_PATH: /tmp/pw/node_modules
         run: sh distribution/docker/smoke-test.sh radarr:smoke "${{ steps.version.outputs.value }}"
+
+      - name: Upload Library Structure screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: library-structure-ui
+          path: /tmp/library-structure-*.png
+          if-no-files-found: ignore
 
       - name: Build and push
         uses: docker/build-push-action@v6

@@ -13,6 +13,7 @@ import styles from './TextInput.css';
 export interface CommonTextInputProps {
   className?: string;
   readOnly?: boolean;
+  isDisabled?: boolean;
   autoFocus?: boolean;
   placeholder?: string;
   name: string;
@@ -43,6 +44,7 @@ function TextInput({
   className = styles.input,
   type = 'text',
   readOnly = false,
+  isDisabled = false,
   autoFocus = false,
   placeholder,
   name,
@@ -154,12 +156,13 @@ function TextInput({
     <input
       ref={inputRef}
       type={type}
-      readOnly={readOnly}
+      readOnly={readOnly || isDisabled}
+      disabled={isDisabled}
       autoFocus={autoFocus}
       placeholder={placeholder}
       className={classNames(
         className,
-        readOnly && styles.readOnly,
+        (readOnly || isDisabled) && styles.readOnly,
         hasError && styles.hasError,
         hasWarning && styles.hasWarning,
         hasButton && styles.hasButton
