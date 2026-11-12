@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Linq.Expressions;
 using FizzWare.NBuilder;
 using FluentAssertions;
 using Moq;
@@ -383,6 +384,31 @@ namespace NzbDrone.Core.Test.RootFolderTests
             unmapped.Should().HaveCount(2);
             unmapped.Should().Contain(item => item.Path == marvelFolder && item.RelativePath == rootFolderPath.GetRelativePath(ironMan));
             unmapped.Should().Contain(item => item.Path == Path.GetDirectoryName(heat));
+        }
+
+        [Test]
+        public void should_persist_a_layout_change_on_an_existing_root()
+        {
+            var stored = new RootFolder
+            {
+                Id = 7,
+                Path = @"C:\Movies".AsOsAgnostic(),
+                FolderLayout = MovieFolderLayout.MovieFolder
+            };
+
+            Mocker.GetMock<IRootFolderRepository>()
+                .Setup(repository => repository.Get(stored.Id))
+                .Returns(stored);
+
+            Subject.Update(new RootFolder
+            {
+                Id = stored.Id,
+                FolderLayout = MovieFolderLayout.Flat
+            });
+
+            stored.FolderLayout.Should().Be(MovieFolderLayout.Flat);
+            Mocker.GetMock<IRootFolderRepository>()
+                .Verify(repository => repository.SetFields(stored, It.IsAny<Expression<Func<RootFolder, object>>[]>()), Times.Once());
         }
     }
 }

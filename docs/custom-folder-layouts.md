@@ -61,7 +61,7 @@ No movie-table rewrite and no unique index change. `Movies.Path` is indexed but 
 
 ## Settings
 
-- **Per root folder**, chosen when the root is added (`folderLayout` on `POST /api/v3/rootfolder`). There is no edit endpoint today; changing layout means removing and re-adding the root. Movies keep the path they were imported with.
+- **Per root folder**, chosen when the root is added (`folderLayout` on `POST /api/v3/rootfolder`) and changed later with `PUT /api/v3/rootfolder/{id}`. Changing the layout does not rewrite existing movie paths. New movies, imports, and moves use the new layout.
 - **Custom folder format** on the naming config (`customMovieFolderFormat`). Tokens are the movie-folder tokens, including `{Movie Collection}`. Slashes create nested directories. An empty format places new custom-layout movies in the root. The format does **not** have to contain the movie title, so `{Movie Collection}` can group a whole collection in one folder. It must not use file-quality tokens.
 - The existing movie folder format is still what `MovieFolder` roots use.
 
@@ -107,7 +107,7 @@ Anything else stays on disk and stays out of this movie's row. Cleanup therefore
 
 ## What this version does not finish
 
-- Editing a root's layout after it is created, and a migration that rewrites existing movie paths when the layout changes.
+- A migration that rewrites existing movie paths when the layout changes. Layout can be edited; paths stay where they are until a move.
 - A per-movie layout override (layout is per root).
 - Applying the custom format to an already imported library (organize/move into `{Movie Collection}/...`).
 - Parsing collection or genre from the parent folder name when importing, so new downloads can recreate `Movie Series/Marvel Movies` without a hand-written format.

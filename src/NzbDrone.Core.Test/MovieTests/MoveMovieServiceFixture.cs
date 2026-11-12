@@ -5,9 +5,11 @@ using FizzWare.NBuilder;
 using Moq;
 using NUnit.Framework;
 using NzbDrone.Common.Disk;
+using NzbDrone.Core.MediaFiles;
 using NzbDrone.Core.Movies;
 using NzbDrone.Core.Movies.Commands;
 using NzbDrone.Core.Organizer;
+using NzbDrone.Core.RootFolders;
 using NzbDrone.Core.Test.Framework;
 using NzbDrone.Test.Common;
 
@@ -112,6 +114,38 @@ namespace NzbDrone.Core.Test.MovieTests
 
             Mocker.GetMock<IDiskTransferService>()
                   .Verify(v => v.TransferFolder(_bulkCommand.Movies.First().SourcePath, expectedPath, TransferMode.Move), Times.Once());
+        }
+
+        [Test]
+        public void should_move_files_directly_into_a_flat_root()
+        {
+            var destination = _bulkCommand.DestinationRootFolder;
+            var source = _bulkCommand.Movies.First().SourcePath;
+            var fileName = "Heat (1995).mkv";
+            _movie.Id = 1;
+
+            Mocker.GetMock<IRootFolderService>()
+                .Setup(service => service.GetFolderLayout(destination))
+                .Returns(MovieFolderLayout.Flat);
+
+            Mocker.GetMock<IMediaFileService>()
+                .Setup(service => service.GetFilesByMovie(_movie.Id))
+                .Returns(new List<MovieFile>
+                {
+                    new MovieFile { MovieId = _movie.Id, RelativePath = fileName }
+                });
+
+            Mocker.GetMock<IDiskProvider>()
+                .Setup(disk => disk.FileExists(It.IsAny<string>()))
+                .Returns(true);
+
+            Subject.Execute(_bulkCommand);
+
+            Mocker.GetMock<IDiskTransferService>()
+                .Verify(service => service.TransferFile(Path.Combine(source, fileName), Path.Combine(destination, fileName), TransferMode.Move), Times.Once());
+
+            Mocker.GetMock<IDiskTransferService>()
+                .Verify(service => service.TransferFolder(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<TransferMode>()), Times.Never());
         }
 
         [Test]

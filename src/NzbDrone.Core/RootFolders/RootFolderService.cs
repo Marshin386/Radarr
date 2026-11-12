@@ -20,6 +20,7 @@ namespace NzbDrone.Core.RootFolders
         List<RootFolder> All();
         List<RootFolder> AllWithUnmappedFolders();
         RootFolder Add(RootFolder rootDir);
+        RootFolder Update(RootFolder rootFolder);
         void Remove(int id);
         RootFolder Get(int id, bool timeout);
         string GetBestRootFolderPath(string path, List<RootFolder> rootFolders = null);
@@ -137,6 +138,17 @@ namespace NzbDrone.Core.RootFolders
             _cache.Clear();
 
             return rootFolder;
+        }
+
+        public RootFolder Update(RootFolder rootFolder)
+        {
+            var existing = _rootFolderRepository.Get(rootFolder.Id);
+
+            existing.FolderLayout = rootFolder.FolderLayout;
+            _rootFolderRepository.SetFields(existing, folder => folder.FolderLayout);
+            _cache.Clear();
+
+            return existing;
         }
 
         public void Remove(int id)

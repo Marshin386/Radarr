@@ -7,6 +7,8 @@ import RootFolder from 'typings/RootFolder';
 interface RootFolderAppState
   extends AppSectionState<RootFolder>,
     AppSectionDeleteState,
-    AppSectionSaveState {}
+    AppSectionSaveState {
+  pendingChanges: Record<string, RootFolder['folderLayout']>;
+}
 
 export default RootFolderAppState;

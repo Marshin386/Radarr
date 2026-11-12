@@ -37,7 +37,9 @@ function RootFolderModalContent(props: RootFolderModalContentProps) {
   const [rootFolderPath, setRootFolderPath] = useState(props.rootFolderPath);
 
   const { isLoading, data } = useApiQuery<MovieFolder>({
-    path: `/movie/${movieId}/folder`,
+    path: `/movie/${movieId}/folder?rootFolderPath=${encodeURIComponent(
+      rootFolderPath
+    )}`,
   });
 
   const onInputChange = useCallback(({ value }: InputChanged<string>) => {
@@ -46,9 +48,12 @@ function RootFolderModalContent(props: RootFolderModalContentProps) {
 
   const handleSavePress = useCallback(() => {
     const separator = isWindows ? '\\' : '/';
+    const folder = data?.folder ?? '';
 
+    // A flat root, or a custom format that renders empty, stores the movie
+    // at the root itself. Movie-folder and nested custom layouts keep a folder.
     onSavePress({
-      path: `${rootFolderPath}${separator}${data?.folder}`,
+      path: folder ? `${rootFolderPath}${separator}${folder}` : rootFolderPath,
       rootFolderPath,
     });
   }, [rootFolderPath, isWindows, data, onSavePress]);
@@ -82,7 +87,7 @@ function RootFolderModalContent(props: RootFolderModalContentProps) {
       <ModalFooter>
         <Button onPress={onModalClose}>{translate('Cancel')}</Button>
 
-        <Button disabled={isLoading || !data?.folder} onPress={handleSavePress}>
+        <Button disabled={isLoading || !data} onPress={handleSavePress}>
           {translate('UpdatePath')}
         </Button>
       </ModalFooter>

@@ -40,7 +40,7 @@ const rootFolderColumns: Column[] = [
 ];
 
 function RootFolders() {
-  const { isFetching, isPopulated, error, items } = useSelector(
+  const { isFetching, isPopulated, error, items, pendingChanges } = useSelector(
     createRootFoldersSelector()
   );
 
@@ -70,6 +70,7 @@ function RootFolders() {
               id={rootFolder.id}
               path={rootFolder.path}
               folderLayout={rootFolder.folderLayout}
+              pendingLayout={pendingChanges?.[String(rootFolder.id)]}
               accessible={rootFolder.accessible}
               freeSpace={rootFolder.freeSpace}
               unmappedFolders={rootFolder.unmappedFolders}

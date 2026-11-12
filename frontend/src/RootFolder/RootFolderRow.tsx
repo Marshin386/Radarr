@@ -1,13 +1,17 @@
 import React, { useCallback, useState } from 'react';
 import { useDispatch } from 'react-redux';
+import FormInputGroup from 'Components/Form/FormInputGroup';
 import Label from 'Components/Label';
 import IconButton from 'Components/Link/IconButton';
 import Link from 'Components/Link/Link';
 import ConfirmModal from 'Components/Modal/ConfirmModal';
 import TableRowCell from 'Components/Table/Cells/TableRowCell';
 import TableRow from 'Components/Table/TableRow';
-import { icons, kinds } from 'Helpers/Props';
-import { deleteRootFolder } from 'Store/Actions/rootFolderActions';
+import { icons, inputTypes, kinds } from 'Helpers/Props';
+import {
+  deleteRootFolder,
+  setRootFolderValue,
+} from 'Store/Actions/rootFolderActions';
 import formatBytes from 'Utilities/Number/formatBytes';
 import translate from 'Utilities/String/translate';
 import styles from './RootFolderRow.css';
@@ -16,20 +20,10 @@ interface RootFolderRowProps {
   id: number;
   path: string;
   folderLayout?: string;
+  pendingLayout?: string;
   accessible: boolean;
   freeSpace?: number;
   unmappedFolders: object[];
-}
-
-function folderLayoutLabel(folderLayout?: string) {
-  switch (folderLayout) {
-    case 'flat':
-      return translate('MovieFolderLayoutFlat');
-    case 'custom':
-      return translate('MovieFolderLayoutCustom');
-    default:
-      return translate('MovieFolderLayoutMovieFolder');
-  }
 }
 
 function RootFolderRow(props: RootFolderRowProps) {
@@ -37,6 +31,7 @@ function RootFolderRow(props: RootFolderRowProps) {
     id,
     path,
     folderLayout,
+    pendingLayout,
     accessible,
     freeSpace = 0,
     unmappedFolders = [],
@@ -47,6 +42,18 @@ function RootFolderRow(props: RootFolderRowProps) {
   const dispatch = useDispatch();
 
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [proposedLayout, setProposedLayout] = useState<string | null>(null);
+  const savedLayout = folderLayout || 'movieFolder';
+  const selectedLayout = pendingLayout || savedLayout;
+
+  const layoutOptions = [
+    {
+      key: 'movieFolder',
+      value: translate('MovieFolderLayoutMovieFolder'),
+    },
+    { key: 'flat', value: translate('MovieFolderLayoutFlat') },
+    { key: 'custom', value: translate('MovieFolderLayoutCustom') },
+  ];
 
   const onDeletePress = useCallback(() => {
     setIsDeleteModalOpen(true);
@@ -61,6 +68,34 @@ function RootFolderRow(props: RootFolderRowProps) {
 
     setIsDeleteModalOpen(false);
   }, [dispatch, id]);
+
+  const onLayoutChange = useCallback(
+    ({ value }: { value: string }) => {
+      if (value === selectedLayout) {
+        return;
+      }
+
+      if (value === savedLayout) {
+        dispatch(setRootFolderValue({ id, folderLayout: value }));
+        return;
+      }
+
+      setProposedLayout(value);
+    },
+    [dispatch, id, savedLayout, selectedLayout]
+  );
+
+  const onLayoutChangeCancel = useCallback(() => {
+    setProposedLayout(null);
+  }, []);
+
+  const onLayoutChangeConfirm = useCallback(() => {
+    if (proposedLayout) {
+      dispatch(setRootFolderValue({ id, folderLayout: proposedLayout }));
+    }
+
+    setProposedLayout(null);
+  }, [dispatch, id, proposedLayout]);
 
   return (
     <TableRow>
@@ -86,7 +121,15 @@ function RootFolderRow(props: RootFolderRowProps) {
           : formatBytes(freeSpace)}
       </TableRowCell>
 
-      <TableRowCell>{folderLayoutLabel(folderLayout)}</TableRowCell>
+      <TableRowCell className={styles.layout}>
+        <FormInputGroup
+          type={inputTypes.SELECT}
+          name="folderLayout"
+          value={selectedLayout}
+          values={layoutOptions}
+          onChange={onLayoutChange}
+        />
+      </TableRowCell>
 
       <TableRowCell className={styles.unmappedFolders}>
         {isUnavailable ? '-' : unmappedFolders.length}
@@ -99,6 +142,16 @@ function RootFolderRow(props: RootFolderRowProps) {
           onPress={onDeletePress}
         />
       </TableRowCell>
+
+      <ConfirmModal
+        isOpen={proposedLayout !== null}
+        kind={kinds.WARNING}
+        title={translate('MovieFolderLayoutChange')}
+        message={translate('MovieFolderLayoutChangeMessage', { path })}
+        confirmLabel={translate('Continue')}
+        onConfirm={onLayoutChangeConfirm}
+        onCancel={onLayoutChangeCancel}
+      />
 
       <ConfirmModal
         isOpen={isDeleteModalOpen}

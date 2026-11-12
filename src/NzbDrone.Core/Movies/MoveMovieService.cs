@@ -76,7 +76,7 @@ namespace NzbDrone.Core.Movies
 
             try
             {
-                if (ShouldMoveFilesIndividually(movie, sourcePath))
+                if (ShouldMoveFilesIndividually(movie, sourcePath, destinationPath))
                 {
                     MoveMovieFiles(movie, sourcePath, destinationPath);
                 }
@@ -152,21 +152,39 @@ namespace NzbDrone.Core.Movies
             return Path.Combine(destinationRootFolder, _filenameBuilder.GetMovieFolder(movie));
         }
 
-        private bool ShouldMoveFilesIndividually(Movie movie, string sourcePath)
+        private bool ShouldMoveFilesIndividually(Movie movie, string sourcePath, string destinationPath)
         {
-            if (_rootFolderService.GetFolderLayout(sourcePath) == MovieFolderLayout.Flat)
+            var destinationLayout = _rootFolderService.GetFolderLayout(destinationPath);
+
+            // A flat root has no per-movie directory. Files land directly in the root
+            // even when the movie is leaving a normal folder.
+            if (destinationLayout == MovieFolderLayout.Flat ||
+                _rootFolderService.GetFolderLayout(sourcePath) == MovieFolderLayout.Flat)
             {
                 return true;
             }
 
-            var root = _rootFolderService.GetBestRootFolderPath(sourcePath);
+            var destinationRoot = _rootFolderService.GetBestRootFolderPath(destinationPath);
 
-            if (root.IsNotNullOrWhiteSpace() && sourcePath.PathEquals(root))
+            if (destinationRoot.IsNotNullOrWhiteSpace() && destinationPath.PathEquals(destinationRoot))
+            {
+                return true;
+            }
+
+            var sourceRoot = _rootFolderService.GetBestRootFolderPath(sourcePath);
+
+            if (sourceRoot.IsNotNullOrWhiteSpace() && sourcePath.PathEquals(sourceRoot))
             {
                 return true;
             }
 
             var paths = _movieService.AllMoviePaths() ?? new Dictionary<int, string>();
+
+            if (destinationLayout == MovieFolderLayout.Custom &&
+                paths.Any(entry => entry.Key != movie.Id && entry.Value.IsNotNullOrWhiteSpace() && entry.Value.PathEquals(destinationPath)))
+            {
+                return true;
+            }
 
             return paths.Any(entry => entry.Key != movie.Id && entry.Value.IsNotNullOrWhiteSpace() && entry.Value.PathEquals(sourcePath));
         }

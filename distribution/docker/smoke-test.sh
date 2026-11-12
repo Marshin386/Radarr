@@ -71,4 +71,30 @@ if ! grep -q "Version ${expected}" "${log}"; then
     exit 1
 fi
 
-echo "smoke test passed: /ping returned OK and /api/v3/system/status version is ${expected}"
+flat=/config/flat-root-smoke
+docker exec "${name}" mkdir -p "${flat}"
+docker exec "${name}" chown radarr:radarr "${flat}"
+
+created="$(curl -fsS -H "X-Api-Key: ${api_key}" -H 'Content-Type: application/json' \
+    -d "{\"path\":\"${flat}\",\"folderLayout\":\"movieFolder\"}" \
+    http://127.0.0.1:7878/api/v3/rootfolder)"
+echo "created root folder: ${created}"
+root_id="$(printf '%s' "${created}" | sed -n 's/.*"id": *\([0-9][0-9]*\).*/\1/p')"
+if [ -z "${root_id}" ]; then
+    echo 'creating a root folder did not return an id' >&2
+    exit 1
+fi
+
+updated="$(curl -fsS -X PUT -H "X-Api-Key: ${api_key}" -H 'Content-Type: application/json' \
+    -d "{\"id\":${root_id},\"path\":\"${flat}\",\"folderLayout\":\"flat\"}" \
+    "http://127.0.0.1:7878/api/v3/rootfolder/${root_id}")"
+echo "updated root folder: ${updated}"
+
+read_back="$(curl -fsS -H "X-Api-Key: ${api_key}" "http://127.0.0.1:7878/api/v3/rootfolder/${root_id}")"
+echo "root folder read back: ${read_back}"
+if ! printf '%s' "${read_back}" | grep -Eq '"folderLayout": *"flat"'; then
+    echo 'root folder layout was not saved as flat' >&2
+    exit 1
+fi
+
+echo "smoke test passed: /ping returned OK, version is ${expected}, and a root folder layout updated to flat"

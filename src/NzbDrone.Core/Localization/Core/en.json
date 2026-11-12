@@ -1169,6 +1169,8 @@
   "MovieFolderLayoutFlat": "Flat folder",
   "MovieFolderLayoutHelpText": "Movie folder keeps one folder per movie. Flat puts every movie file directly in this root. Custom imports movies from any nested folder and uses the custom folder format for new movies.",
   "MovieFolderLayoutMovieFolder": "Movie folder",
+  "MovieFolderLayoutChange": "Change Folder Layout",
+  "MovieFolderLayoutChangeMessage": "Existing movies in {path} keep the folders they already use. New movies, imports, and moves into this root use the layout you selected. Save Media Management to keep the change.",
   "CustomMovieFolderFormat": "Custom Movie Folder Format",
   "CustomMovieFolderFormatHelpText": "Used for new movies in a root folder set to the custom layout. Slashes create nested folders, for example {Movie Collection}/{Movie Title} ({Release Year}). Leave empty to place those movies directly in the root.",
   "MovieFolderFormatHelpTextDeprecatedWarning": "Tokens associated with movie file properties have been deprecated and will no longer be supported in future major versions.",

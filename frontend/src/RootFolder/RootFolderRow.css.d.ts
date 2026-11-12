@@ -3,6 +3,7 @@
 interface CssExports {
   'actions': string;
   'freeSpace': string;
+  'layout': string;
   'link': string;
   'unavailableLabel': string;
   'unavailablePath': string;
