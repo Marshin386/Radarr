@@ -91,7 +91,9 @@ Anything else stays on disk and stays out of this movie's row. Cleanup therefore
 
 **Delete.** Movie-folder deletes still remove the directory, with the same "this path is another movie's parent" abort. Flat and custom deletes remove only this movie's known files, video files that match this movie, and sidecars that match those stems. The shared directory is not removed. The relative paths are captured before the movie row is deleted so a parallel database cleanup cannot forget which file belonged to the movie. Deleting one file from a flat root no longer treats "no child directories" as an empty drive, and does not delete the root when empty-folder cleanup runs.
 
-**Move.** Bulk move of a flat movie, or of any movie that shares its directory, moves that movie's files and matching sidecars. It does not `TransferFolder` the whole root. A custom movie that is alone in its directory still moves as a folder.
+**Move.** The bulk editor retargets every selected movie to the current Library Structure, whether or not files are moved. Movie folder uses `<root>/<Movie Folder Format>`. Flat uses the root itself. Custom uses `<root>/<Custom Movie Folder Format>`, including nested folders. Choosing not to move files updates those paths only.
+
+When files are moved between two dedicated folders, the whole movie folder moves, so subtitles, nfo files, and images go with it. Moving into or out of a flat root, or into a folder another movie already uses, moves only that movie's video files and sidecars whose names continue the video stem with `.`, `-`, or `_` (`Heat (1995).en.srt`). Other files, such as a bare `poster.jpg`, stay where they are. After that kind of move, a source folder that is empty, is not a root folder, and is not another movie's folder is deleted, and empty parent folders are removed up to but not including the root.
 
 ## Risks
 

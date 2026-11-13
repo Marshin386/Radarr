@@ -134,4 +134,6 @@ fi
 
 node distribution/docker/library-structure-ui.cjs
 
-echo "smoke test passed: /ping returned OK, version is ${expected}, and Library Structure saved in the UI"
+RADARR_API_KEY="${api_key}" RADARR_CONTAINER="${name}" python3 distribution/docker/bulk-root-move.py
+
+echo "smoke test passed: /ping returned OK, version is ${expected}, Library Structure saved in the UI, and bulk root moves matched the layout"

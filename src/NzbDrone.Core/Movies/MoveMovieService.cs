@@ -1,7 +1,9 @@
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using NLog;
+using NzbDrone.Common;
 using NzbDrone.Common.Disk;
 using NzbDrone.Common.Extensions;
 using NzbDrone.Common.Instrumentation.Extensions;
@@ -79,6 +81,7 @@ namespace NzbDrone.Core.Movies
                 if (ShouldMoveFilesIndividually(movie, sourcePath, destinationPath))
                 {
                     MoveMovieFiles(movie, sourcePath, destinationPath);
+                    RemoveEmptySourceFolders(movie, sourcePath);
                 }
                 else
                 {
@@ -193,6 +196,8 @@ namespace NzbDrone.Core.Movies
         {
             _diskProvider.CreateFolder(destinationPath);
 
+            var moved = new HashSet<string>(PathEqualityComparer.Instance);
+            var stems = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var files = _mediaFileService.GetFilesByMovie(movie.Id) ?? new List<MovieFile>();
 
             foreach (var file in files)
@@ -203,38 +208,99 @@ namespace NzbDrone.Core.Movies
                 }
 
                 var from = Path.Combine(sourcePath, file.RelativePath);
-                var to = Path.Combine(destinationPath, Path.GetFileName(file.RelativePath));
+                var name = Path.GetFileName(file.RelativePath);
 
-                if (!_diskProvider.FileExists(from) || from.PathEquals(to))
+                if (MoveFileIfPresent(from, Path.Combine(destinationPath, name), moved))
+                {
+                    file.RelativePath = name;
+                    _mediaFileService.Update(file);
+                    stems.Add(Path.GetFileNameWithoutExtension(name));
+                }
+            }
+
+            foreach (var video in _diskProvider.GetFiles(sourcePath, false) ?? Enumerable.Empty<string>())
+            {
+                if (!MediaFileExtensions.Extensions.Contains(Path.GetExtension(video)) || moved.Contains(video))
                 {
                     continue;
                 }
 
-                _diskTransferService.TransferFile(from, to, TransferMode.Move);
-                file.RelativePath = destinationPath.GetRelativePath(to);
-                _mediaFileService.Update(file);
-
-                var stem = Path.GetFileNameWithoutExtension(from);
-
-                foreach (var extra in _diskProvider.GetFiles(sourcePath, false) ?? Enumerable.Empty<string>())
+                if (!MovieFileLayout.FileMatchesMovie(movie, video))
                 {
-                    if (MediaFileExtensions.Extensions.Contains(Path.GetExtension(extra)))
-                    {
-                        continue;
-                    }
-
-                    if (!MovieFileLayout.ExtraFileMatchesMovieStem(extra, stem) || !_diskProvider.FileExists(extra))
-                    {
-                        continue;
-                    }
-
-                    var extraDestination = Path.Combine(destinationPath, Path.GetFileName(extra));
-
-                    if (!extra.PathEquals(extraDestination))
-                    {
-                        _diskTransferService.TransferFile(extra, extraDestination, TransferMode.Move);
-                    }
+                    continue;
                 }
+
+                var name = Path.GetFileName(video);
+
+                if (MoveFileIfPresent(video, Path.Combine(destinationPath, name), moved))
+                {
+                    stems.Add(Path.GetFileNameWithoutExtension(name));
+                }
+            }
+
+            foreach (var extra in _diskProvider.GetFiles(sourcePath, false) ?? Enumerable.Empty<string>())
+            {
+                if (MediaFileExtensions.Extensions.Contains(Path.GetExtension(extra)) || moved.Contains(extra))
+                {
+                    continue;
+                }
+
+                if (!stems.Any(stem => MovieFileLayout.ExtraFileMatchesMovieStem(extra, stem)))
+                {
+                    continue;
+                }
+
+                MoveFileIfPresent(extra, Path.Combine(destinationPath, Path.GetFileName(extra)), moved);
+            }
+        }
+
+        private bool MoveFileIfPresent(string from, string to, HashSet<string> moved)
+        {
+            if (!_diskProvider.FileExists(from) || from.PathEquals(to) || !moved.Add(from))
+            {
+                return false;
+            }
+
+            _diskTransferService.TransferFile(from, to, TransferMode.Move);
+            return true;
+        }
+
+        private void RemoveEmptySourceFolders(Movie movie, string sourcePath)
+        {
+            var root = _rootFolderService.GetBestRootFolderPath(sourcePath);
+            var paths = _movieService.AllMoviePaths() ?? new Dictionary<int, string>();
+            var current = sourcePath;
+
+            while (current.IsNotNullOrWhiteSpace())
+            {
+                if (root.IsNotNullOrWhiteSpace() && current.PathEquals(root))
+                {
+                    return;
+                }
+
+                if (paths.Any(entry => entry.Key != movie.Id &&
+                                       entry.Value.IsNotNullOrWhiteSpace() &&
+                                       (entry.Value.PathEquals(current) || current.IsParentPath(entry.Value))))
+                {
+                    return;
+                }
+
+                if (!_diskProvider.FolderExists(current))
+                {
+                    current = current.GetParentPath();
+                    continue;
+                }
+
+                var files = _diskProvider.GetFiles(current, false) ?? Enumerable.Empty<string>();
+                var directories = _diskProvider.GetDirectories(current) ?? Enumerable.Empty<string>();
+
+                if (files.Any() || directories.Any())
+                {
+                    return;
+                }
+
+                _diskProvider.DeleteFolder(current, false);
+                current = current.GetParentPath();
             }
         }
     }

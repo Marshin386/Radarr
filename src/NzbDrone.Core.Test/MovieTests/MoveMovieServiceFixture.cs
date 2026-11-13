@@ -149,6 +149,68 @@ namespace NzbDrone.Core.Test.MovieTests
         }
 
         [Test]
+        public void should_build_a_nested_custom_folder_and_move_the_folder()
+        {
+            var destinationRoot = _bulkCommand.DestinationRootFolder;
+            var customFolder = Path.Combine("Group", "Heat (1995)");
+            var expectedPath = Path.Combine(destinationRoot, customFolder);
+
+            Mocker.GetMock<IRootFolderService>()
+                .Setup(service => service.GetFolderLayout(destinationRoot))
+                .Returns(MovieFolderLayout.Custom);
+
+            Mocker.GetMock<IBuildFileNames>()
+                .Setup(builder => builder.GetCustomMovieFolder(It.IsAny<Movie>(), null))
+                .Returns(customFolder);
+
+            Subject.Execute(_bulkCommand);
+
+            Mocker.GetMock<IDiskProvider>()
+                .Verify(disk => disk.CreateFolder(Path.GetDirectoryName(expectedPath)), Times.Once());
+
+            Mocker.GetMock<IDiskTransferService>()
+                .Verify(service => service.TransferFolder(_bulkCommand.Movies.First().SourcePath, expectedPath, TransferMode.Move), Times.Once());
+        }
+
+        [Test]
+        public void should_not_delete_a_flat_root_after_moving_one_movie_out()
+        {
+            var sourceRoot = @"C:\Test\Flat".AsOsAgnostic();
+            var destinationRoot = _bulkCommand.DestinationRootFolder;
+            var fileName = "Heat (1995).mkv";
+            _movie.Id = 1;
+            _movie.Path = sourceRoot;
+            _bulkCommand.Movies.First().SourcePath = sourceRoot;
+
+            Mocker.GetMock<IRootFolderService>()
+                .Setup(service => service.GetFolderLayout(It.IsAny<string>()))
+                .Returns(MovieFolderLayout.Flat);
+
+            Mocker.GetMock<IRootFolderService>()
+                .Setup(service => service.GetBestRootFolderPath(It.IsAny<string>(), It.IsAny<List<RootFolder>>()))
+                .Returns(sourceRoot);
+
+            Mocker.GetMock<IMediaFileService>()
+                .Setup(service => service.GetFilesByMovie(_movie.Id))
+                .Returns(new List<MovieFile>
+                {
+                    new MovieFile { MovieId = _movie.Id, RelativePath = fileName }
+                });
+
+            Mocker.GetMock<IDiskProvider>()
+                .Setup(disk => disk.FileExists(It.IsAny<string>()))
+                .Returns(true);
+
+            Subject.Execute(_bulkCommand);
+
+            Mocker.GetMock<IDiskTransferService>()
+                .Verify(service => service.TransferFile(Path.Combine(sourceRoot, fileName), Path.Combine(destinationRoot, fileName), TransferMode.Move), Times.Once());
+
+            Mocker.GetMock<IDiskProvider>()
+                .Verify(disk => disk.DeleteFolder(sourceRoot, false), Times.Never());
+        }
+
+        [Test]
         public void should_skip_movie_folder_if_it_does_not_exist()
         {
             Mocker.GetMock<IDiskProvider>()
