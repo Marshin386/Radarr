@@ -12,6 +12,8 @@ export interface QualityProfileQualityItem {
 interface QualityProfile {
   name: string;
   upgradeAllowed: boolean;
+  upgradeFilePlacement: 'replaceInCurrentLocation' | 'moveToDesignatedLocation';
+  upgradeDestination?: string;
   cutoff: number;
   items: QualityProfileQualityItem[];
   minFormatScore: number;

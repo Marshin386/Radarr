@@ -136,4 +136,9 @@ node distribution/docker/library-structure-ui.cjs
 
 RADARR_API_KEY="${api_key}" RADARR_CONTAINER="${name}" python3 distribution/docker/bulk-root-move.py
 
-echo "smoke test passed: /ping returned OK, version is ${expected}, Library Structure saved in the UI, and bulk root moves matched the layout"
+docker exec "${name}" mkdir -p /config/upgrade-dest
+docker exec "${name}" chown radarr:radarr /config/upgrade-dest
+node distribution/docker/quality-profile-upgrade-ui.cjs
+RADARR_API_KEY="${api_key}" RADARR_CONTAINER="${name}" python3 distribution/docker/upgrade-import.py
+
+echo "smoke test passed: /ping returned OK, version is ${expected}, Library Structure and upgrade placement saved, and upgrade imports matched both options"

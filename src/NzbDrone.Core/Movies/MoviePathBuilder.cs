@@ -10,18 +10,21 @@ namespace NzbDrone.Core.Movies
     public interface IBuildMoviePaths
     {
         string BuildPath(Movie movie, bool useExistingRelativeFolder);
+        string BuildLibraryPath(Movie movie, string rootFolderPath);
     }
 
     public class MoviePathBuilder : IBuildMoviePaths
     {
         private readonly IBuildFileNames _fileNameBuilder;
         private readonly IRootFolderService _rootFolderService;
+        private readonly INamingConfigService _namingConfigService;
         private readonly Logger _logger;
 
-        public MoviePathBuilder(IBuildFileNames fileNameBuilder, IRootFolderService rootFolderService, Logger logger)
+        public MoviePathBuilder(IBuildFileNames fileNameBuilder, IRootFolderService rootFolderService, INamingConfigService namingConfigService, Logger logger)
         {
             _fileNameBuilder = fileNameBuilder;
             _rootFolderService = rootFolderService;
+            _namingConfigService = namingConfigService;
             _logger = logger;
         }
 
@@ -58,6 +61,33 @@ namespace NzbDrone.Core.Movies
             }
 
             return Path.Combine(movie.RootFolderPath, _fileNameBuilder.GetMovieFolder(movie));
+        }
+
+        public string BuildLibraryPath(Movie movie, string rootFolderPath)
+        {
+            if (rootFolderPath.IsNullOrWhiteSpace())
+            {
+                throw new ArgumentException("Root folder was not provided", nameof(rootFolderPath));
+            }
+
+            var root = rootFolderPath.GetCleanPath();
+            var layout = _namingConfigService.GetConfig().FolderLayout;
+
+            if (layout == MovieFolderLayout.Flat)
+            {
+                return root;
+            }
+
+            if (layout == MovieFolderLayout.Custom)
+            {
+                var customFolder = _fileNameBuilder.GetCustomMovieFolder(movie);
+
+                return customFolder.IsNullOrWhiteSpace()
+                    ? root
+                    : Path.Combine(root, customFolder);
+            }
+
+            return Path.Combine(root, _fileNameBuilder.GetMovieFolder(movie));
         }
 
         private string GetExistingRelativePath(Movie movie)

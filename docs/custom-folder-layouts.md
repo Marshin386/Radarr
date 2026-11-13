@@ -93,6 +93,8 @@ Anything else stays on disk and stays out of this movie's row. Cleanup therefore
 
 **Move.** The bulk editor retargets every selected movie to the current Library Structure, whether or not files are moved. Movie folder uses `<root>/<Movie Folder Format>`. Flat uses the root itself. Custom uses `<root>/<Custom Movie Folder Format>`, including nested folders. Choosing not to move files updates those paths only.
 
+A quality profile can send an upgrade to a designated folder instead of replacing the file in place. That folder is used like a root: the movie path becomes the library-structure path under it, and later upgrades and renames follow the new path. The old file and sidecars that share its name go to the recycle bin when one is configured, and an emptied old folder is removed with the same rules as a flat move.
+
 When files are moved between two dedicated folders, the whole movie folder moves, so subtitles, nfo files, and images go with it. Moving into or out of a flat root, or into a folder another movie already uses, moves only that movie's video files and sidecars whose names continue the video stem with `.`, `-`, or `_` (`Heat (1995).en.srt`). Other files, such as a bare `poster.jpg`, stay where they are. After that kind of move, a source folder that is empty, is not a root folder, and is not another movie's folder is deleted, and empty parent folders are removed up to but not including the root.
 
 ## Risks

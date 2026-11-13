@@ -7,6 +7,7 @@ using Microsoft.AspNetCore.Mvc;
 using NzbDrone.Common.Extensions;
 using NzbDrone.Core.CustomFormats;
 using NzbDrone.Core.Profiles.Qualities;
+using NzbDrone.Core.Validation.Paths;
 using Radarr.Http;
 using Radarr.Http.REST;
 using Radarr.Http.REST.Attributes;
@@ -18,11 +19,22 @@ namespace Radarr.Api.V3.Profiles.Quality
     {
         private readonly IQualityProfileService _qualityProfileService;
 
-        public QualityProfileController(IQualityProfileService qualityProfileService, ICustomFormatService formatService)
+        public QualityProfileController(IQualityProfileService qualityProfileService,
+                                        ICustomFormatService formatService,
+                                        PathExistsValidator pathExistsValidator,
+                                        FolderWritableValidator folderWritableValidator)
         {
             _qualityProfileService = qualityProfileService;
 
             SharedValidator.RuleFor(c => c.Name).NotEmpty();
+
+            SharedValidator.RuleFor(c => c.UpgradeDestination)
+                .Cascade(CascadeMode.Stop)
+                .NotEmpty()
+                .IsValidPath()
+                .SetValidator(pathExistsValidator)
+                .SetValidator(folderWritableValidator)
+                .When(c => c.UpgradeAllowed && c.UpgradeFilePlacement == UpgradeFilePlacement.MoveToDesignatedLocation);
 
             // TODO: Need to validate the cutoff is allowed and the ID/quality ID exists
             // TODO: Need to validate the Items to ensure groups have names and at no item has no name, no items and no quality

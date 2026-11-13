@@ -116,6 +116,7 @@ class EditQualityProfileModalContent extends Component {
       onSavePress,
       onModalClose,
       onDeleteQualityProfilePress,
+      hasPendingChanges,
       ...otherProps
     } = this.props;
 
@@ -123,6 +124,8 @@ class EditQualityProfileModalContent extends Component {
       id,
       name,
       upgradeAllowed,
+      upgradeFilePlacement,
+      upgradeDestination,
       cutoff,
       minFormatScore,
       minUpgradeFormatScore,
@@ -133,6 +136,17 @@ class EditQualityProfileModalContent extends Component {
     } = item;
 
     const languageId = language ? language.value.id : 0;
+    const placement = upgradeFilePlacement ? upgradeFilePlacement.value : 'replaceInCurrentLocation';
+    const upgradeFilePlacementOptions = [
+      {
+        key: 'replaceInCurrentLocation',
+        value: translate('UpgradeFilePlacementReplace')
+      },
+      {
+        key: 'moveToDesignatedLocation',
+        value: translate('UpgradeFilePlacementMove')
+      }
+    ];
 
     return (
       <ModalContent onModalClose={onModalClose}>
@@ -197,6 +211,44 @@ class EditQualityProfileModalContent extends Component {
                             onChange={onInputChange}
                           />
                         </FormGroup>
+
+                        {
+                          upgradeAllowed.value &&
+                            <FormGroup size={sizes.EXTRA_SMALL} data-testid="upgrade-file-placement">
+                              <FormLabel size={sizes.SMALL}>
+                                {translate('UpgradeFilePlacement')}
+                              </FormLabel>
+
+                              <FormInputGroup
+                                type={inputTypes.SELECT}
+                                name="upgradeFilePlacement"
+                                {...(upgradeFilePlacement || {})}
+                                value={placement}
+                                values={upgradeFilePlacementOptions}
+                                helpText={translate('UpgradeFilePlacementHelpText')}
+                                onChange={onInputChange}
+                              />
+                            </FormGroup>
+                        }
+
+                        {
+                          upgradeAllowed.value && placement === 'moveToDesignatedLocation' &&
+                            <FormGroup size={sizes.EXTRA_SMALL} data-testid="upgrade-destination">
+                              <FormLabel size={sizes.SMALL}>
+                                {translate('UpgradeDestination')}
+                              </FormLabel>
+
+                              <FormInputGroup
+                                type={inputTypes.PATH}
+                                name="upgradeDestination"
+                                {...(upgradeDestination || {})}
+                                value={upgradeDestination && upgradeDestination.value ? upgradeDestination.value : ''}
+                                includeFiles={false}
+                                helpText={translate('UpgradeDestinationHelpText')}
+                                onChange={onInputChange}
+                              />
+                            </FormGroup>
+                        }
 
                         {
                           upgradeAllowed.value &&
@@ -346,9 +398,10 @@ class EditQualityProfileModalContent extends Component {
             <SpinnerErrorButton
               isSpinning={isSaving}
               error={saveError}
+              isDisabled={!hasPendingChanges}
               onPress={onSavePress}
             >
-              {translate('Save')}
+              {hasPendingChanges ? translate('SaveChanges') : translate('NoChanges')}
             </SpinnerErrorButton>
           </ModalFooter>
         </Measure>
