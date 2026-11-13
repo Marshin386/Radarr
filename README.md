@@ -29,6 +29,11 @@ Library import lists files instead of treating each subfolder as one movie. Disk
 
 The fork version is shown in **System → About**. The published image is `ghcr.io/marshin386/radarr` (linux/amd64 and linux/arm64). More detail is in [docs/FORK.md](docs/FORK.md) and [docs/custom-folder-layouts.md](docs/custom-folder-layouts.md).
 
+> [!WARNING]
+> **Back up your Radarr config before switching**
+>
+> This fork upgrades the database (migrations 244–246). Starting official Radarr on that same database is not supported. Test with a copy of the config folder, and keep a backup of the original.
+
 ### Support for this fork
 
 Problems with **flat or custom folder layouts**, **upgrade placement**, this Docker image, or other changes in this fork should be reported on [this repository's Issues](https://github.com/Marshin386/Radarr/issues), not on the official Radarr project. Please do not file fork-specific bugs against [Radarr/Radarr](https://github.com/Radarr/Radarr).
@@ -66,7 +71,7 @@ Then open `http://<host>:7878`. When you add a root folder, choose **Movie folde
 | `testing` | Non-default branches only |
 | `v*` | A tagged release, once one is cut |
 
-If you are testing next to an existing Radarr, use a **copy** of the config folder. This image runs database migration 244, which cannot be rolled back by starting the official image on the same database. A sample test stack (host port 7879, so it can run beside an existing instance) is in [docs/docker-compose.sample.yml](docs/docker-compose.sample.yml).
+Before you start, back up the config folder and use a **copy** if you still need official Radarr. A sample test stack (host port 7879, so it can run beside an existing instance) is in [docs/docker-compose.sample.yml](docs/docker-compose.sample.yml).
 
 ---
 
