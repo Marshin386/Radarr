@@ -203,6 +203,7 @@ def main():
         movies.append(movie)
         print("added", movie.get("title"), movie.get("path"))
 
+    wait_for_commands()
     originals = {movie["id"]: movie["path"].rstrip("/") for movie in movies}
     if len(set(originals.values())) != 2:
         raise SystemExit("the two movies did not get distinct folders: %s" % originals)

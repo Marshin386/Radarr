@@ -69,7 +69,16 @@ namespace NzbDrone.Core.MediaFiles.MediaInfo
 
         public bool UpdateMediaInfo(MovieFile movieFile, Movie movie)
         {
-            var path = movieFile.Path.IsNotNullOrWhiteSpace() ? movieFile.Path : Path.Combine(movie.Path, movieFile.RelativePath);
+            var path = movieFile.Path.IsNotNullOrWhiteSpace()
+                ? movieFile.Path
+                : movieFile.RelativePath.IsNotNullOrWhiteSpace() && movie.Path.IsNotNullOrWhiteSpace()
+                    ? Path.Combine(movie.Path, movieFile.RelativePath)
+                    : null;
+
+            if (path.IsNullOrWhiteSpace())
+            {
+                return false;
+            }
 
             if (!_diskProvider.FileExists(path))
             {

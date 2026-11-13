@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using NzbDrone.Common;
+using NzbDrone.Common.Extensions;
 using NzbDrone.Core.MediaFiles.Events;
 using NzbDrone.Core.Messaging.Events;
 using NzbDrone.Core.Movies;
@@ -70,7 +71,10 @@ namespace NzbDrone.Core.MediaFiles
                 movieFile.Movie = _movieRepository.Get(movieFile.MovieId);
             }
 
-            movieFile.Path = Path.Combine(movieFile.Movie.Path, movieFile.RelativePath);
+            if (movieFile.RelativePath.IsNotNullOrWhiteSpace() && movieFile.Movie.Path.IsNotNullOrWhiteSpace())
+            {
+                movieFile.Path = Path.Combine(movieFile.Movie.Path, movieFile.RelativePath);
+            }
 
             _mediaFileRepository.Delete(movieFile);
             _eventAggregator.PublishEvent(new MovieFileDeletedEvent(movieFile, reason));

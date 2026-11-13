@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using NzbDrone.Common.Extensions;
 using NzbDrone.Core.CustomFormats;
 using NzbDrone.Core.DecisionEngine.Specifications;
 using NzbDrone.Core.Languages;
@@ -75,7 +76,9 @@ namespace Radarr.Api.V3.MovieFiles
 
                 MovieId = model.MovieId,
                 RelativePath = model.RelativePath,
-                Path = Path.Combine(movie.Path, model.RelativePath),
+                Path = model.RelativePath.IsNotNullOrWhiteSpace() && movie.Path.IsNotNullOrWhiteSpace()
+                    ? Path.Combine(movie.Path, model.RelativePath)
+                    : model.Path,
                 Size = model.Size,
                 DateAdded = model.DateAdded,
                 SceneName = model.SceneName,
