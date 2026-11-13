@@ -20,13 +20,18 @@ Each root folder can use one of three layouts:
 - **Flat**: movie files live directly in the root, for example `/movies/Nocturnal Animals (2016).mkv` next to `/movies/Heat (1995).mkv`.
 - **Custom**: existing movies can be imported from arbitrary nested folders, including several movies sharing a group folder such as `/Theatre/Movie Series/Marvel Movies/(2008) Iron Man.mkv`. New movies in that root use a custom folder format (default `{Movie Collection}/{Movie Title} ({Release Year})`).
 
+When **Upgrades Allowed** is checked on a quality profile, **Upgraded File** chooses where the new file goes:
+
+- **Replace in current location** (default): the upgrade replaces the file in the movie's current folder, the same as official Radarr.
+- **Move to designated location**: the upgrade is stored under a chosen **Upgrade Destination** folder using the current Library Structure, and the movie path is updated to match.
+
 Library import lists files instead of treating each subfolder as one movie. Disk scan and rescan only attach files that parse as that movie. Downloads and renames stay in the movie's folder (the root, for a flat library). Deleting a movie removes that movie's file and sidecars that match its filename, and does not delete a shared directory or other movies' files.
 
 The fork version is shown in **System → About**. The published image is `ghcr.io/marshin386/radarr` (linux/amd64 and linux/arm64). More detail is in [docs/FORK.md](docs/FORK.md) and [docs/custom-folder-layouts.md](docs/custom-folder-layouts.md).
 
 ### Support for this fork
 
-Problems with **flat or custom folder layouts**, this Docker image, or other changes in this fork should be reported **in this repository**, not on the official Radarr project. Please do not file fork-specific bugs against [Radarr/Radarr](https://github.com/Radarr/Radarr).
+Problems with **flat or custom folder layouts**, **upgrade placement**, this Docker image, or other changes in this fork should be reported on [this repository's Issues](https://github.com/Marshin386/Radarr/issues), not on the official Radarr project. Please do not file fork-specific bugs against [Radarr/Radarr](https://github.com/Radarr/Radarr).
 
 For general Radarr usage, official docs, and upstream bugs or feature requests, use the [Servarr wiki](https://wiki.servarr.com/radarr) and [official support channels](https://github.com/Radarr/Radarr#support).
 
