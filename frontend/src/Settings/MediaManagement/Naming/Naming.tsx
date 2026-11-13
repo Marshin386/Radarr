@@ -29,12 +29,10 @@ const SECTION = 'naming';
 
 function createNamingSelector() {
   return createSelector(
-    (state: AppState) => state.settings.advancedSettings,
     (state: AppState) => state.settings.namingExamples,
     createSettingsSectionSelector(SECTION),
-    (advancedSettings, namingExamples, sectionSettings) => {
+    (namingExamples, sectionSettings) => {
       return {
-        advancedSettings,
         examples: namingExamples.item,
         examplesPopulated: namingExamples.isPopulated,
         ...sectionSettings,
@@ -44,14 +42,16 @@ function createNamingSelector() {
 }
 
 interface NamingModalOptions {
-  name: keyof Pick<NamingConfig, 'standardMovieFormat' | 'movieFolderFormat'>;
+  name: keyof Pick<
+    NamingConfig,
+    'standardMovieFormat' | 'movieFolderFormat' | 'customMovieFolderFormat'
+  >;
   movie?: boolean;
   additional?: boolean;
 }
 
 function Naming() {
   const {
-    advancedSettings,
     isFetching,
     error,
     settings,
@@ -111,9 +111,27 @@ function Naming() {
     });
   }, [setNamingModalOpen, setNamingModalOptions]);
 
+  const onCustomMovieFolderNamingModalOpenClick = useCallback(() => {
+    setNamingModalOpen();
+
+    setNamingModalOptions({
+      name: 'customMovieFolderFormat',
+    });
+  }, [setNamingModalOpen, setNamingModalOptions]);
+
   const renameMovies = hasSettings && settings.renameMovies.value;
   const replaceIllegalCharacters =
     hasSettings && settings.replaceIllegalCharacters.value;
+
+  const libraryStructure = settings.folderLayout?.value || 'movieFolder';
+  const libraryStructureOptions = [
+    {
+      key: 'movieFolder',
+      value: translate('MovieFolderLayoutMovieFolder'),
+    },
+    { key: 'flat', value: translate('MovieFolderLayoutFlat') },
+    { key: 'custom', value: translate('MovieFolderLayoutCustom') },
+  ];
 
   const colonReplacementOptions = [
     { key: 'delete', value: translate('Delete') },
@@ -131,6 +149,8 @@ function Naming() {
   const standardMovieFormatErrors = [];
   const movieFolderFormatHelpTexts = [];
   const movieFolderFormatErrors = [];
+  const customMovieFolderFormatHelpTexts = [];
+  const customMovieFolderFormatErrors = [];
 
   if (examplesPopulated) {
     if (examples.movieExample) {
@@ -149,6 +169,14 @@ function Naming() {
       );
     } else {
       movieFolderFormatErrors.push({ message: translate('InvalidFormat') });
+    }
+
+    if (examples.customMovieFolderExample) {
+      customMovieFolderFormatHelpTexts.push(
+        `${translate('Example')}: ${examples.customMovieFolderExample}`
+      );
+    } else if (settings.customMovieFolderFormat?.value) {
+      customMovieFolderFormatErrors.push({ message: translate('InvalidFormat') });
     }
   }
 
@@ -227,11 +255,20 @@ function Naming() {
             </FormGroup>
           ) : null}
 
-          <FormGroup
-            advancedSettings={advancedSettings}
-            isAdvanced={true}
-            size={sizes.MEDIUM}
-          >
+          <FormGroup size={sizes.MEDIUM} data-testid="library-structure">
+            <FormLabel>{translate('LibraryStructure')}</FormLabel>
+
+            <FormInputGroup
+              type={inputTypes.SELECT}
+              name="folderLayout"
+              values={libraryStructureOptions}
+              helpText={translate('LibraryStructureHelpText')}
+              onChange={handleInputChange}
+              {...settings.folderLayout}
+            />
+          </FormGroup>
+
+          <FormGroup size={sizes.MEDIUM}>
             <FormLabel>{translate('MovieFolderFormat')}</FormLabel>
 
             <FormInputGroup
@@ -239,12 +276,16 @@ function Naming() {
               type={inputTypes.TEXT}
               name="movieFolderFormat"
               buttons={
-                <FormInputButton onPress={onMovieFolderNamingModalOpenClick}>
+                <FormInputButton
+                  onPress={onMovieFolderNamingModalOpenClick}
+                  isDisabled={libraryStructure !== 'movieFolder'}
+                >
                   ?
                 </FormInputButton>
               }
               onChange={handleInputChange}
               {...settings.movieFolderFormat}
+              isDisabled={libraryStructure !== 'movieFolder'}
               helpTexts={[
                 translate('MovieFolderFormatHelpText'),
                 ...movieFolderFormatHelpTexts,
@@ -258,6 +299,37 @@ function Naming() {
               ]}
             />
           </FormGroup>
+
+          {settings.customMovieFolderFormat ? (
+            <FormGroup>
+              <FormLabel>{translate('CustomMovieFolderFormat')}</FormLabel>
+
+              <FormInputGroup
+                inputClassName={styles.namingInput}
+                type={inputTypes.TEXT}
+                name="customMovieFolderFormat"
+                buttons={
+                  <FormInputButton
+                    onPress={onCustomMovieFolderNamingModalOpenClick}
+                    isDisabled={libraryStructure !== 'custom'}
+                  >
+                    ?
+                  </FormInputButton>
+                }
+                onChange={handleInputChange}
+                {...settings.customMovieFolderFormat}
+                isDisabled={libraryStructure !== 'custom'}
+                helpTexts={[
+                  translate('CustomMovieFolderFormatHelpText'),
+                  ...customMovieFolderFormatHelpTexts,
+                ]}
+                errors={[
+                  ...customMovieFolderFormatErrors,
+                  ...settings.customMovieFolderFormat.errors,
+                ]}
+              />
+            </FormGroup>
+          ) : null}
 
           {namingModalOptions ? (
             <NamingModal

@@ -90,5 +90,68 @@ namespace NzbDrone.Core.Test.MovieTests
 
             Subject.BuildPath(_movie, true).Should().Be(Path.Combine(rootFolder, _movie.Title));
         }
+
+        [Test]
+        public void should_use_the_root_itself_for_a_flat_layout()
+        {
+            var rootFolder = @"C:\Test\Movies".AsOsAgnostic();
+
+            Mocker.GetMock<IRootFolderService>()
+                .Setup(service => service.GetFolderLayout(rootFolder))
+                .Returns(MovieFolderLayout.Flat);
+
+            _movie.RootFolderPath = rootFolder;
+            _movie.Path = null;
+
+            Subject.BuildPath(_movie, false).Should().Be(rootFolder);
+        }
+
+        [Test]
+        public void should_use_the_custom_folder_format_for_a_custom_layout()
+        {
+            var rootFolder = @"C:\Theatre".AsOsAgnostic();
+            var customFolder = Path.Combine("Movie Series", "Marvel Movies");
+
+            Mocker.GetMock<IRootFolderService>()
+                .Setup(service => service.GetFolderLayout(rootFolder))
+                .Returns(MovieFolderLayout.Custom);
+
+            Mocker.GetMock<IBuildFileNames>()
+                .Setup(builder => builder.GetCustomMovieFolder(_movie, null))
+                .Returns(customFolder);
+
+            _movie.RootFolderPath = rootFolder;
+            _movie.Path = null;
+
+            Subject.BuildPath(_movie, false).Should().Be(Path.Combine(rootFolder, customFolder));
+        }
+
+        [Test]
+        public void should_place_an_upgrade_in_a_flat_designated_folder()
+        {
+            var destination = @"C:\Upgrades".AsOsAgnostic();
+
+            Mocker.GetMock<INamingConfigService>()
+                .Setup(service => service.GetConfig())
+                .Returns(new NamingConfig { FolderLayout = MovieFolderLayout.Flat });
+
+            Subject.BuildLibraryPath(_movie, destination).Should().Be(destination);
+        }
+
+        [Test]
+        public void should_place_an_upgrade_in_a_movie_folder_under_the_designated_folder()
+        {
+            var destination = @"C:\Upgrades".AsOsAgnostic();
+
+            Mocker.GetMock<INamingConfigService>()
+                .Setup(service => service.GetConfig())
+                .Returns(new NamingConfig { FolderLayout = MovieFolderLayout.MovieFolder });
+
+            Mocker.GetMock<IBuildFileNames>()
+                .Setup(builder => builder.GetMovieFolder(_movie, null))
+                .Returns("Heat (1995)");
+
+            Subject.BuildLibraryPath(_movie, destination).Should().Be(Path.Combine(destination, "Heat (1995)"));
+        }
     }
 }

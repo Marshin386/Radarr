@@ -52,7 +52,7 @@ namespace Radarr.Http.Frontend
             builder.AppendLine($"  \"apiRoot\": \"{_urlBase}/api/v3\",");
             builder.AppendLine($"  \"apiKey\": \"{_apiKey}\",");
             builder.AppendLine($"  \"release\": \"{BuildInfo.Release}\",");
-            builder.AppendLine($"  \"version\": \"{BuildInfo.Version.ToString()}\",");
+            builder.AppendLine($"  \"version\": \"{BuildInfo.VersionString}\",");
             builder.AppendLine($"  \"instanceName\": \"{_configFileProvider.InstanceName.ToString()}\",");
             builder.AppendLine($"  \"theme\": \"{_configFileProvider.Theme.ToString()}\",");
             builder.AppendLine($"  \"branch\": \"{_configFileProvider.Branch.ToLower()}\",");

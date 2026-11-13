@@ -31,6 +31,43 @@ namespace NzbDrone.Core.Organizer
 
             return ruleBuilder.SetValidator(new ValidMovieFolderFormatValidator());
         }
+
+        public static IRuleBuilderOptions<T, string> ValidCustomMovieFolderFormat<T>(this IRuleBuilder<T, string> ruleBuilder)
+        {
+            return ruleBuilder.SetValidator(new ValidCustomMovieFolderFormatValidator());
+        }
+    }
+
+    public class ValidCustomMovieFolderFormatValidator : PropertyValidator
+    {
+        protected override string GetDefaultMessageTemplate() => "Custom movie folder format contains unsupported characters or tokens: {tokens}";
+
+        protected override bool IsValid(PropertyValidatorContext context)
+        {
+            // Empty places new movies in a custom-layout root directly in that root.
+            if (context.PropertyValue is not string value || value.IsNullOrWhiteSpace())
+            {
+                return true;
+            }
+
+            var invalidCharacters = Path.GetInvalidPathChars().Where(character => value.IndexOf(character) >= 0).ToList();
+
+            if (invalidCharacters.Any())
+            {
+                context.MessageFormatter.AppendArgument("tokens", string.Join(string.Empty, invalidCharacters));
+                return false;
+            }
+
+            var deprecated = FileNameValidation.DeprecatedMovieFolderTokensRegex.Matches(value);
+
+            if (deprecated.Any())
+            {
+                context.MessageFormatter.AppendArgument("tokens", string.Join(", ", deprecated.Select(match => match.Value)));
+                return false;
+            }
+
+            return true;
+        }
     }
 
     public class ValidMovieFormatValidator : PropertyValidator

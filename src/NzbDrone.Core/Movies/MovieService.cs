@@ -55,6 +55,7 @@ namespace NzbDrone.Core.Movies
                                                IHandle<MovieFileDeletedEvent>
     {
         private readonly IMovieRepository _movieRepository;
+        private readonly IMediaFileService _mediaFileService;
         private readonly IConfigService _configService;
         private readonly IEventAggregator _eventAggregator;
         private readonly IBuildMoviePaths _moviePathBuilder;
@@ -62,6 +63,7 @@ namespace NzbDrone.Core.Movies
         private readonly Logger _logger;
 
         public MovieService(IMovieRepository movieRepository,
+                            IMediaFileService mediaFileService,
                             IEventAggregator eventAggregator,
                             IConfigService configService,
                             IBuildMoviePaths moviePathBuilder,
@@ -69,6 +71,7 @@ namespace NzbDrone.Core.Movies
                             Logger logger)
         {
             _movieRepository = movieRepository;
+            _mediaFileService = mediaFileService;
             _eventAggregator = eventAggregator;
             _configService = configService;
             _moviePathBuilder = moviePathBuilder;
@@ -213,19 +216,23 @@ namespace NzbDrone.Core.Movies
         public void DeleteMovie(int movieId, bool deleteFiles, bool addImportListExclusion = false)
         {
             var movie = _movieRepository.Get(movieId);
+            var deletedEvent = new MoviesDeletedEvent(new List<Movie> { movie }, deleteFiles, addImportListExclusion);
+            deletedEvent.OwnedRelativePaths = CaptureOwnedRelativePaths(deletedEvent.Movies);
 
             _movieRepository.Delete(movieId);
-            _eventAggregator.PublishEvent(new MoviesDeletedEvent(new List<Movie> { movie }, deleteFiles, addImportListExclusion));
+            _eventAggregator.PublishEvent(deletedEvent);
             _logger.Info("Deleted movie {0}", movie);
         }
 
         public void DeleteMovies(List<int> movieIds, bool deleteFiles, bool addImportListExclusion = false)
         {
             var moviesToDelete = _movieRepository.Get(movieIds).ToList();
+            var deletedEvent = new MoviesDeletedEvent(moviesToDelete, deleteFiles, addImportListExclusion);
+            deletedEvent.OwnedRelativePaths = CaptureOwnedRelativePaths(moviesToDelete);
 
             _movieRepository.DeleteMany(movieIds);
 
-            _eventAggregator.PublishEvent(new MoviesDeletedEvent(moviesToDelete, deleteFiles, addImportListExclusion));
+            _eventAggregator.PublishEvent(deletedEvent);
 
             foreach (var movie in moviesToDelete)
             {
@@ -292,6 +299,22 @@ namespace NzbDrone.Core.Movies
         public bool MoviePathExists(string folder)
         {
             return _movieRepository.MoviePathExists(folder);
+        }
+
+        private Dictionary<int, List<string>> CaptureOwnedRelativePaths(List<Movie> movies)
+        {
+            var paths = new Dictionary<int, List<string>>();
+
+            foreach (var movie in movies)
+            {
+                var files = _mediaFileService.GetFilesByMovie(movie.Id) ?? new List<MovieFile>();
+                paths[movie.Id] = files
+                    .Select(file => file.RelativePath)
+                    .Where(path => path.IsNotNullOrWhiteSpace())
+                    .ToList();
+            }
+
+            return paths;
         }
 
         public void RemoveAddOptions(Movie movie)

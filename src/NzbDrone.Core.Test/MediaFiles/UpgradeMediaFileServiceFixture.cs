@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.IO;
 using FizzWare.NBuilder;
 using FluentAssertions;
@@ -8,6 +9,8 @@ using NzbDrone.Core.MediaFiles;
 using NzbDrone.Core.MediaFiles.MovieImport;
 using NzbDrone.Core.Movies;
 using NzbDrone.Core.Parser.Model;
+using NzbDrone.Core.Profiles.Qualities;
+using NzbDrone.Core.RootFolders;
 using NzbDrone.Core.Test.Framework;
 using NzbDrone.Test.Common;
 
@@ -123,6 +126,67 @@ namespace NzbDrone.Core.Test.MediaFiles
             Assert.Throws<RootFolderNotFoundException>(() => Subject.UpgradeMovieFile(_movieFile, _localMovie));
 
             Mocker.GetMock<IMediaFileService>().Verify(v => v.Delete(_localMovie.Movie.MovieFile, DeleteMediaFileReason.Upgrade), Times.Never());
+        }
+
+        [Test]
+        public void should_move_an_upgrade_into_a_designated_flat_folder_and_update_the_movie_path()
+        {
+            GivenSingleMovieWithSingleMovieFile();
+
+            var destination = @"C:\Upgrades".AsOsAgnostic();
+            var oldPath = _localMovie.Movie.Path;
+            _localMovie.Movie.QualityProfile = new QualityProfile
+            {
+                UpgradeAllowed = true,
+                UpgradeFilePlacement = UpgradeFilePlacement.MoveToDesignatedLocation,
+                UpgradeDestination = destination
+            };
+
+            Mocker.GetMock<IBuildMoviePaths>()
+                .Setup(builder => builder.BuildLibraryPath(_localMovie.Movie, destination))
+                .Returns(destination);
+
+            Mocker.GetMock<IDiskProvider>()
+                .Setup(disk => disk.FolderExists(destination))
+                .Returns(true);
+
+            Mocker.GetMock<IDiskProvider>()
+                .Setup(disk => disk.GetFiles(It.IsAny<string>(), false))
+                .Returns(new List<string>());
+
+            Mocker.GetMock<IDiskProvider>()
+                .Setup(disk => disk.GetDirectories(It.IsAny<string>()))
+                .Returns(new List<string>());
+
+            Mocker.GetMock<IRootFolderService>()
+                .Setup(service => service.GetBestRootFolderPath(oldPath, null))
+                .Returns(Directory.GetParent(oldPath).FullName);
+
+            Subject.UpgradeMovieFile(_movieFile, _localMovie);
+
+            _localMovie.Movie.Path.Should().Be(destination);
+            Mocker.GetMock<IMovieService>()
+                .Verify(service => service.UpdateMovie(It.Is<Movie>(movie => movie.Path == destination)), Times.Once());
+            Mocker.GetMock<IMoveMovieFiles>()
+                .Verify(mover => mover.MoveMovieFile(It.IsAny<MovieFile>(), It.Is<LocalMovie>(local => local.Movie.Path == destination)), Times.Once());
+        }
+
+        [Test]
+        public void should_leave_the_movie_path_when_the_profile_replaces_in_place()
+        {
+            GivenSingleMovieWithSingleMovieFile();
+
+            var oldPath = _localMovie.Movie.Path;
+            _localMovie.Movie.QualityProfile = new QualityProfile
+            {
+                UpgradeAllowed = true,
+                UpgradeFilePlacement = UpgradeFilePlacement.ReplaceInCurrentLocation
+            };
+
+            Subject.UpgradeMovieFile(_movieFile, _localMovie);
+
+            _localMovie.Movie.Path.Should().Be(oldPath);
+            Mocker.GetMock<IMovieService>().Verify(service => service.UpdateMovie(It.IsAny<Movie>()), Times.Never());
         }
     }
 }

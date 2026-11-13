@@ -13,6 +13,12 @@
   margin-left: 10px;
 }
 
+.layout {
+  composes: cell from '~Components/Table/Cells/TableRowCell.css';
+
+  width: 240px;
+}
+
 .freeSpace,
 .unmappedFolders {
   composes: cell from '~Components/Table/Cells/TableRowCell.css';

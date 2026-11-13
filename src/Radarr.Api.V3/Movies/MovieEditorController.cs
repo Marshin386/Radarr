@@ -122,7 +122,9 @@ namespace Radarr.Api.V3.Movies
             var translations = _movieTranslationService.GetAllTranslationsForLanguage(configLanguage);
             var tdict = translations.ToDictionaryIgnoreDuplicates(x => x.MovieMetadataId);
 
-            var updatedMovies = _movieService.UpdateMovie(moviesToUpdate, !resource.MoveFiles);
+            // Root changes always retarget the path for the current Library Structure.
+            // moveFiles only decides whether the files are moved to that path.
+            var updatedMovies = _movieService.UpdateMovie(moviesToUpdate, false);
 
             var moviesResources = new List<MovieResource>(updatedMovies.Count);
 

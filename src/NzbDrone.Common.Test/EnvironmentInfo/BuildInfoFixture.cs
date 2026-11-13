@@ -14,6 +14,12 @@ namespace NzbDrone.Common.Test.EnvironmentInfo
         }
 
         [Test]
+        public void should_report_fork_version()
+        {
+            BuildInfo.VersionString.Should().Be("7.0.3-folders.1");
+        }
+
+        [Test]
         public void should_get_branch()
         {
             BuildInfo.Branch.Should().NotBe("unknown");

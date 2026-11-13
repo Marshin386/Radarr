@@ -81,9 +81,15 @@ namespace NzbDrone.Core.Parser.Model
                 OriginalFilePath = GetOriginalFilePath()
             };
 
-            if (Movie.Path.IsParentPath(movieFile.Path))
+            if (Movie.Path.IsNotNullOrWhiteSpace() && Movie.Path.IsParentPath(movieFile.Path))
             {
-                movieFile.RelativePath = Movie.Path.GetRelativePath(Path.CleanFilePath());
+                movieFile.RelativePath = Movie.Path.GetRelativePath(movieFile.Path);
+            }
+            else if (movieFile.Path.IsNotNullOrWhiteSpace())
+            {
+                // A scan can observe a file after the movie path has already moved.
+                // Keep a usable name so the API can still describe the file.
+                movieFile.RelativePath = System.IO.Path.GetFileName(movieFile.Path);
             }
 
             return movieFile;

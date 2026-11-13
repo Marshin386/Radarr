@@ -1,3 +1,4 @@
+using NzbDrone.Core.Movies;
 using NzbDrone.Core.Organizer;
 using Radarr.Http.REST;
 
@@ -10,5 +11,7 @@ namespace Radarr.Api.V3.Config
         public ColonReplacementFormat ColonReplacementFormat { get; set; }
         public string StandardMovieFormat { get; set; }
         public string MovieFolderFormat { get; set; }
+        public string CustomMovieFolderFormat { get; set; }
+        public MovieFolderLayout FolderLayout { get; set; }
     }
 }

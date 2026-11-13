@@ -18,6 +18,15 @@ namespace NzbDrone.Core.Test.RootFolderTests
         }
 
         [Test]
+        public void should_return_root_folder_when_the_movie_path_is_the_root()
+        {
+            var root = @"C:\Test\Movies".AsOsAgnostic();
+
+            GivenRootFolders(root);
+            Subject.GetBestRootFolderPath(root).Should().Be(root);
+        }
+
+        [Test]
         public void should_return_root_folder_that_is_parent_path()
         {
             GivenRootFolders(@"C:\Test\Movies".AsOsAgnostic(), @"D:\Test\Movies".AsOsAgnostic());

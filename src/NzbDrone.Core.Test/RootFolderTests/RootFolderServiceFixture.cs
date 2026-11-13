@@ -2,12 +2,14 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Linq.Expressions;
 using FizzWare.NBuilder;
 using FluentAssertions;
 using Moq;
 using NUnit.Framework;
 using NzbDrone.Common.Disk;
 using NzbDrone.Common.EnvironmentInfo;
+using NzbDrone.Common.Extensions;
 using NzbDrone.Core.Configuration;
 using NzbDrone.Core.Movies;
 using NzbDrone.Core.Organizer;
@@ -304,6 +306,149 @@ namespace NzbDrone.Core.Test.RootFolderTests
             var unmappedFolders = Subject.Get(rootFolder.Id, false).UnmappedFolders;
 
             unmappedFolders.Count.Should().Be(3);
+        }
+
+        [Test]
+        public void should_list_each_video_file_in_a_flat_root()
+        {
+            var rootFolderPath = @"C:\Movies".AsOsAgnostic();
+            var rootFolder = new RootFolder
+            {
+                Id = 4,
+                Path = rootFolderPath,
+                FolderLayout = MovieFolderLayout.Flat
+            };
+
+            var files = new[]
+            {
+                Path.Combine(rootFolderPath, "Nocturnal Animals (2016).mkv"),
+                Path.Combine(rootFolderPath, "Heat (1995).mkv")
+            };
+
+            Mocker.GetMock<IRootFolderRepository>()
+                .Setup(repository => repository.All())
+                .Returns(new List<RootFolder> { rootFolder });
+
+            Mocker.GetMock<IRootFolderRepository>()
+                .Setup(repository => repository.Get(rootFolder.Id))
+                .Returns(rootFolder);
+
+            Mocker.GetMock<IMovieRepository>()
+                .Setup(repository => repository.AllMoviePaths())
+                .Returns(new Dictionary<int, string>());
+
+            _namingConfig.FolderLayout = MovieFolderLayout.Flat;
+
+            Mocker.GetMock<IDiskProvider>()
+                .Setup(disk => disk.GetFiles(rootFolderPath, false))
+                .Returns(files);
+
+            var unmapped = Subject.Get(rootFolder.Id, false).UnmappedFolders;
+
+            unmapped.Should().HaveCount(2);
+            unmapped.Select(item => item.Path).Should().OnlyContain(path => path == rootFolderPath);
+            unmapped.Select(item => item.Name).Should().BeEquivalentTo("Nocturnal Animals (2016)", "Heat (1995)");
+        }
+
+        [Test]
+        public void should_import_movies_nested_under_arbitrary_folders()
+        {
+            var rootFolderPath = @"C:\Theatre".AsOsAgnostic();
+            var marvelFolder = Path.Combine(rootFolderPath, "Movie Series", "Marvel Movies");
+            var rootFolder = new RootFolder
+            {
+                Id = 5,
+                Path = rootFolderPath,
+                FolderLayout = MovieFolderLayout.Custom
+            };
+
+            var ironMan = Path.Combine(marvelFolder, "(2008) Iron Man.mkv");
+            var heat = Path.Combine(rootFolderPath, "Movies", "Heat (1995)", "Heat (1995).mkv");
+
+            Mocker.GetMock<IRootFolderRepository>()
+                .Setup(repository => repository.All())
+                .Returns(new List<RootFolder> { rootFolder });
+
+            Mocker.GetMock<IRootFolderRepository>()
+                .Setup(repository => repository.Get(rootFolder.Id))
+                .Returns(rootFolder);
+
+            Mocker.GetMock<IMovieRepository>()
+                .Setup(repository => repository.AllMoviePaths())
+                .Returns(new Dictionary<int, string>());
+
+            _namingConfig.FolderLayout = MovieFolderLayout.Custom;
+
+            Mocker.GetMock<IDiskProvider>()
+                .Setup(disk => disk.GetFiles(rootFolderPath, true))
+                .Returns(new[] { ironMan, heat });
+
+            var unmapped = Subject.Get(rootFolder.Id, false).UnmappedFolders;
+
+            unmapped.Should().HaveCount(2);
+            unmapped.Should().Contain(item => item.Path == marvelFolder && item.RelativePath == rootFolderPath.GetRelativePath(ironMan));
+            unmapped.Should().Contain(item => item.Path == Path.GetDirectoryName(heat));
+        }
+
+        [Test]
+        public void should_persist_a_layout_change_on_an_existing_root()
+        {
+            var stored = new RootFolder
+            {
+                Id = 7,
+                Path = @"C:\Movies".AsOsAgnostic(),
+                FolderLayout = MovieFolderLayout.MovieFolder
+            };
+
+            Mocker.GetMock<IRootFolderRepository>()
+                .Setup(repository => repository.Get(stored.Id))
+                .Returns(stored);
+
+            Subject.Update(new RootFolder
+            {
+                Id = stored.Id,
+                FolderLayout = MovieFolderLayout.Flat
+            });
+
+            stored.FolderLayout.Should().Be(MovieFolderLayout.Flat);
+            Mocker.GetMock<IRootFolderRepository>()
+                .Verify(repository => repository.SetFields(stored, It.IsAny<Expression<Func<RootFolder, object>>[]>()), Times.Once());
+        }
+
+        [Test]
+        public void should_read_library_structure_from_naming_config()
+        {
+            var root = @"C:\Movies".AsOsAgnostic();
+
+            Mocker.GetMock<IRootFolderRepository>()
+                .Setup(repository => repository.All())
+                .Returns(new List<RootFolder>
+                {
+                    new RootFolder { Path = root, FolderLayout = MovieFolderLayout.MovieFolder }
+                });
+
+            _namingConfig.FolderLayout = MovieFolderLayout.Flat;
+
+            Subject.GetFolderLayout(root).Should().Be(MovieFolderLayout.Flat);
+        }
+
+        [Test]
+        public void should_copy_library_structure_onto_every_root()
+        {
+            var stored = new RootFolder
+            {
+                Id = 1,
+                Path = @"C:\Movies".AsOsAgnostic(),
+                FolderLayout = MovieFolderLayout.MovieFolder
+            };
+
+            Mocker.GetMock<IRootFolderRepository>()
+                .Setup(repository => repository.All())
+                .Returns(new List<RootFolder> { stored });
+
+            Subject.ApplyLibraryLayout(MovieFolderLayout.Flat);
+
+            stored.FolderLayout.Should().Be(MovieFolderLayout.Flat);
         }
     }
 }

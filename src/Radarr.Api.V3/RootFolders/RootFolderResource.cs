@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using NzbDrone.Common.Extensions;
+using NzbDrone.Core.Movies;
 using NzbDrone.Core.RootFolders;
 using Radarr.Http.REST;
 
@@ -9,6 +10,7 @@ namespace Radarr.Api.V3.RootFolders
     public class RootFolderResource : RestResource
     {
         public string Path { get; set; }
+        public MovieFolderLayout FolderLayout { get; set; }
         public bool Accessible { get; set; }
         public long? FreeSpace { get; set; }
 
@@ -29,6 +31,7 @@ namespace Radarr.Api.V3.RootFolders
                 Id = model.Id,
 
                 Path = model.Path.GetCleanPath(),
+                FolderLayout = model.FolderLayout,
                 Accessible = model.Accessible,
                 FreeSpace = model.FreeSpace,
                 UnmappedFolders = model.UnmappedFolders
@@ -46,7 +49,8 @@ namespace Radarr.Api.V3.RootFolders
             {
                 Id = resource.Id,
 
-                Path = resource.Path
+                Path = resource.Path,
+                FolderLayout = resource.FolderLayout
 
                 // Accessible
                 // FreeSpace
