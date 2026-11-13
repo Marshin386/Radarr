@@ -6,6 +6,27 @@ const pass = process.env.RADARR_PASSWORD || 'radarr-test';
 const destination = process.env.UPGRADE_DEST || '/config/upgrade-dest';
 const shots = process.env.SHOT_DIR || '/tmp';
 
+async function openProfile(page, name) {
+  const title = page.getByText(name, { exact: true }).first();
+  await title.waitFor();
+  const opened = await title.evaluate((element) => {
+    let node = element;
+    while (node && node !== document.body) {
+      const button = node.querySelector(':scope > button');
+      if (button && getComputedStyle(button).position === 'absolute') {
+        button.click();
+        return true;
+      }
+      node = node.parentElement;
+    }
+    return false;
+  });
+  if (!opened) {
+    throw new Error(`could not open the ${name} quality profile`);
+  }
+  await page.getByText('Edit Quality Profile', { exact: true }).waitFor();
+}
+
 (async () => {
   const browser = await chromium.launch({ headless: true });
   const page = await browser.newPage({ viewport: { width: 1400, height: 1100 } });
@@ -22,7 +43,7 @@ const shots = process.env.SHOT_DIR || '/tmp';
       await page.goto(`${base}/settings/profiles`, { waitUntil: 'domcontentloaded' });
     }
 
-    await page.getByText('Any', { exact: true }).first().click();
+    await openProfile(page, 'Any');
     const placement = page.getByTestId('upgrade-file-placement');
     const upgrades = page.locator('input[name="upgradeAllowed"]');
     await upgrades.waitFor();
@@ -57,7 +78,7 @@ const shots = process.env.SHOT_DIR || '/tmp';
     await placement.waitFor({ state: 'hidden' });
 
     await page.reload({ waitUntil: 'domcontentloaded' });
-    await page.getByText('Any', { exact: true }).first().click();
+    await openProfile(page, 'Any');
     await placement.waitFor();
     await placement.getByText('Move to designated location', { exact: true }).waitFor();
     await page.locator('input[name="upgradeDestination"]').waitFor();

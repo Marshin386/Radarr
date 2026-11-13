@@ -19,7 +19,7 @@ docker run -d --name "${name}" -p 7878:7878 -e PUID=1000 -e PGID=1000 "${image}"
 cleanup() {
     echo '--- container logs ---'
     docker logs "${name}" > "${log}" 2>&1 || true
-    cat "${log}" || true
+    tail -n 200 "${log}" || true
     docker rm -f "${name}" >/dev/null 2>&1 || true
 }
 trap cleanup EXIT
