@@ -35,7 +35,7 @@ Do not force-push or delete `develop`. The repository ruleset rejects both.
 | Git ref | Image tags |
 | --- | --- |
 | Any branch except `develop` (including this PR branch) | `testing`, the branch name (`/` becomes `-`), and `sha-<commit>` |
-| `develop` | `latest` |
+| `develop` | `latest` and `sha-<commit>` |
 | Tag `v7.0.3-folders.1` | `v7.0.3-folders.1` |
 
 To test this pull request after the workflow succeeds:
