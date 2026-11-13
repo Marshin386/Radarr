@@ -8,6 +8,11 @@
 
 A fork of [Radarr](https://github.com/Radarr/Radarr) that adds optional **flat** and **custom** movie folder layouts, while keeping the default one-folder-per-movie behavior.
 
+> [!WARNING]
+> **Back up your Radarr config before switching**
+>
+> This fork upgrades the database (migrations 244–246). Starting official Radarr on that same database is not supported. Test with a copy of the config folder, and keep a backup of the original.
+
 ## About this fork
 
 This repository is a fork of [Radarr/Radarr](https://github.com/Radarr/Radarr), a movie collection manager for Usenet and BitTorrent users.
@@ -66,7 +71,7 @@ Then open `http://<host>:7878`. When you add a root folder, choose **Movie folde
 | `testing` | Non-default branches only |
 | `v*` | A tagged release, once one is cut |
 
-If you are testing next to an existing Radarr, use a **copy** of the config folder. This image runs database migration 244, which cannot be rolled back by starting the official image on the same database. A sample test stack (host port 7879, so it can run beside an existing instance) is in [docs/docker-compose.sample.yml](docs/docker-compose.sample.yml).
+Before you start, back up the config folder and use a **copy** if you still need official Radarr. A sample test stack (host port 7879, so it can run beside an existing instance) is in [docs/docker-compose.sample.yml](docs/docker-compose.sample.yml).
 
 ---
 
