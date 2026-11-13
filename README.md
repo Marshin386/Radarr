@@ -8,11 +8,6 @@
 
 A fork of [Radarr](https://github.com/Radarr/Radarr) that adds optional **flat** and **custom** movie folder layouts, while keeping the default one-folder-per-movie behavior.
 
-> [!WARNING]
-> **Back up your Radarr config before switching**
->
-> This fork upgrades the database (migrations 244–246). Starting official Radarr on that same database is not supported. Test with a copy of the config folder, and keep a backup of the original.
-
 ## About this fork
 
 This repository is a fork of [Radarr/Radarr](https://github.com/Radarr/Radarr), a movie collection manager for Usenet and BitTorrent users.
@@ -33,6 +28,11 @@ When **Upgrades Allowed** is checked on a quality profile, **Upgraded File** cho
 Library import lists files instead of treating each subfolder as one movie. Disk scan and rescan only attach files that parse as that movie. Downloads and renames stay in the movie's folder (the root, for a flat library). Deleting a movie removes that movie's file and sidecars that match its filename, and does not delete a shared directory or other movies' files.
 
 The fork version is shown in **System → About**. The published image is `ghcr.io/marshin386/radarr` (linux/amd64 and linux/arm64). More detail is in [docs/FORK.md](docs/FORK.md) and [docs/custom-folder-layouts.md](docs/custom-folder-layouts.md).
+
+> [!WARNING]
+> **Back up your Radarr config before switching**
+>
+> This fork upgrades the database (migrations 244–246). Starting official Radarr on that same database is not supported. Test with a copy of the config folder, and keep a backup of the original.
 
 ### Support for this fork
 
