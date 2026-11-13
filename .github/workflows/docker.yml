@@ -93,7 +93,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: library-structure-ui
-          path: /tmp/library-structure-*.png
+          path: |
+            /tmp/library-structure-*.png
+            /tmp/upgrade-placement-*.png
           if-no-files-found: ignore
 
       - name: Build and push

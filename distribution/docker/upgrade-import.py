@@ -95,6 +95,11 @@ def import_file(movie_id, path, quality_id):
         },
     )
     wait_for_commands()
+    movie = call("GET", "/api/v3/movie/%s" % movie_id)
+    imported = ((movie.get("movieFile") or {}).get("quality") or {}).get("quality") or {}
+    if imported.get("id") != quality_id:
+        raise SystemExit("import of %s did not become the movie file: %s" % (path, movie.get("movieFile")))
+    return movie
 
 
 def write_file(path):
@@ -112,8 +117,8 @@ def main():
     original = movie["path"].rstrip("/")
     folder_name = os.path.basename(original)
 
-    current = "%s/%s.mkv" % (original, folder_name)
-    sidecar = "%s/%s.en.srt" % (original, folder_name)
+    current = "%s/The.Matrix.1999.HDTV.mkv" % original
+    sidecar = "%s/The.Matrix.1999.HDTV.en.srt" % original
     write_file(current)
     write_file(sidecar)
     import_file(movie_id, current, 4)
@@ -153,7 +158,8 @@ def main():
         sidecar_path = seed_again()
         source = "/config/downloads/The.Matrix.1999.%s.mkv" % layout
         write_file(source)
-        import_file(movie_id, source, 7)
+        quality_id = 6 if layout == "flat" else 9
+        import_file(movie_id, source, quality_id)
         moved = call("GET", "/api/v3/movie/%s" % movie_id)
         actual = moved["path"].rstrip("/")
         if actual != expected_path:

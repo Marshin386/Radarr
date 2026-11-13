@@ -22,13 +22,13 @@ const shots = process.env.SHOT_DIR || '/tmp';
       await page.goto(`${base}/settings/profiles`, { waitUntil: 'domcontentloaded' });
     }
 
-    await page.getByText('Any', { exact: true }).click();
+    await page.getByText('Any', { exact: true }).first().click();
     const placement = page.getByTestId('upgrade-file-placement');
     const upgrades = page.locator('input[name="upgradeAllowed"]');
     await upgrades.waitFor();
 
     if (!(await upgrades.isChecked())) {
-      await upgrades.click();
+      await upgrades.locator('xpath=ancestor::label').click();
     }
 
     await placement.waitFor();
@@ -44,6 +44,7 @@ const shots = process.env.SHOT_DIR || '/tmp';
     const destinationInput = page.locator('input[name="upgradeDestination"]');
     await destinationInput.waitFor();
     await destinationInput.fill(destination);
+    await destinationInput.blur();
 
     const save = page.getByRole('button', { name: /Save Changes|SaveChanges/ });
     await save.waitFor();
@@ -56,7 +57,7 @@ const shots = process.env.SHOT_DIR || '/tmp';
     await placement.waitFor({ state: 'hidden' });
 
     await page.reload({ waitUntil: 'domcontentloaded' });
-    await page.getByText('Any', { exact: true }).click();
+    await page.getByText('Any', { exact: true }).first().click();
     await placement.waitFor();
     await placement.getByText('Move to designated location', { exact: true }).waitFor();
     await page.locator('input[name="upgradeDestination"]').waitFor();
