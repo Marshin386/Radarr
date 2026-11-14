@@ -312,6 +312,12 @@ namespace NzbDrone.Core.Notifications
 
         public void Handle(MovieFileDeletedEvent message)
         {
+            // The file is still on disk. A delete notification would tell indexers to drop it.
+            if (message.Reason == MediaFiles.DeleteMediaFileReason.UpgradeKept)
+            {
+                return;
+            }
+
             var deleteMessage = new MovieFileDeleteMessage();
             deleteMessage.Message = GetMessage(message.MovieFile.Movie, message.MovieFile.Quality);
             deleteMessage.MovieFile = message.MovieFile;

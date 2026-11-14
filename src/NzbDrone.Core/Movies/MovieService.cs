@@ -476,7 +476,9 @@ namespace NzbDrone.Core.Movies
                 _logger.Debug("Detaching movie {0} from file.", movie.Id);
                 movie.MovieFileId = 0;
 
-                if (message.Reason != DeleteMediaFileReason.Upgrade && _configService.AutoUnmonitorPreviouslyDownloadedMovies)
+                if (message.Reason != DeleteMediaFileReason.Upgrade &&
+                    message.Reason != DeleteMediaFileReason.UpgradeKept &&
+                    _configService.AutoUnmonitorPreviouslyDownloadedMovies)
                 {
                     movie.Monitored = false;
                 }

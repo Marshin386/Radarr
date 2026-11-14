@@ -14,6 +14,7 @@ namespace Radarr.Api.V3.Profiles.Quality
         public bool UpgradeAllowed { get; set; }
         public UpgradeFilePlacement UpgradeFilePlacement { get; set; }
         public string UpgradeDestination { get; set; }
+        public bool KeepOriginalFile { get; set; }
         public int Cutoff { get; set; }
         public List<QualityProfileQualityItemResource> Items { get; set; }
         public int MinFormatScore { get; set; }
@@ -59,6 +60,7 @@ namespace Radarr.Api.V3.Profiles.Quality
                 UpgradeAllowed = model.UpgradeAllowed,
                 UpgradeFilePlacement = model.UpgradeFilePlacement,
                 UpgradeDestination = model.UpgradeDestination,
+                KeepOriginalFile = model.KeepOriginalFile,
                 Cutoff = model.Cutoff,
                 Items = model.Items.ConvertAll(ToResource),
                 MinFormatScore = model.MinFormatScore,
@@ -110,6 +112,7 @@ namespace Radarr.Api.V3.Profiles.Quality
                 UpgradeAllowed = resource.UpgradeAllowed,
                 UpgradeFilePlacement = resource.UpgradeFilePlacement,
                 UpgradeDestination = resource.UpgradeDestination,
+                KeepOriginalFile = resource.KeepOriginalFile,
                 Cutoff = resource.Cutoff,
                 Items = resource.Items.ConvertAll(ToModel),
                 MinFormatScore = resource.MinFormatScore,

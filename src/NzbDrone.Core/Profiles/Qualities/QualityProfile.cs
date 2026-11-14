@@ -26,6 +26,13 @@ namespace NzbDrone.Core.Profiles.Qualities
         public UpgradeFilePlacement UpgradeFilePlacement { get; set; }
         public string UpgradeDestination { get; set; }
 
+        /// <summary>
+        /// When an upgrade is moved to <see cref="UpgradeDestination"/>, leave the previous
+        /// file on disk and stop tracking it. Ignored unless upgrades are allowed and the
+        /// upgraded file is moved to a designated location.
+        /// </summary>
+        public bool KeepOriginalFile { get; set; }
+
         public Quality FirststAllowedQuality()
         {
             var firstAllowed = Items.First(q => q.Allowed);

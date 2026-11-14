@@ -9,12 +9,12 @@ Fork versions are the upstream Radarr release this tree is based on, plus a `-fo
 | Piece | Current value |
 | --- | --- |
 | Upstream base | Radarr **7.0.3** (`majorVersion` in `azure-pipelines.yml` on this `develop`; the last published upstream tag before that bump was `v7.0.2.10888`) |
-| Fork revision | `folders.1` |
-| Full version | `7.0.3-folders.1` |
+| Fork revision | `folders.2` |
+| Full version | `7.0.3-folders.2` |
 
-`distribution/fork-version` is the only place that string is stored. The build stamps it as the assembly informational version, so System → About, the UI version, and the `X-Application-Version` header show `7.0.3-folders.1`. The numeric `AssemblyVersion` stays the upstream-style `10.0.0.*` placeholder because `System.Version` cannot hold a suffix.
+`distribution/fork-version` is the only place that string is stored. The build stamps it as the assembly informational version, so System → About, the UI version, and the `X-Application-Version` header show `7.0.3-folders.2`. The numeric `AssemblyVersion` stays the upstream-style `10.0.0.*` placeholder because `System.Version` cannot hold a suffix.
 
-Bump `N` for each fork release that does not move the upstream base (`7.0.3-folders.2`). When you merge a newer upstream Radarr, change the base too (`7.1.0-folders.1`) and reset `N` to 1.
+Bump `N` for each fork release that does not move the upstream base (`7.0.3-folders.3`). When you merge a newer upstream Radarr, change the base too (`7.1.0-folders.1`) and reset `N` to 1.
 
 ## Cut a release
 
@@ -22,11 +22,11 @@ Bump `N` for each fork release that does not move the upstream base (`7.0.3-fold
 2. Tag that commit. The tag name is the image tag:
 
    ```bash
-   git tag v7.0.3-folders.1
-   git push origin v7.0.3-folders.1
+   git tag v7.0.3-folders.2
+   git push origin v7.0.3-folders.2
    ```
 
-3. The [Docker image workflow](../.github/workflows/docker.yml) pushes `ghcr.io/marshin386/radarr:v7.0.3-folders.1`.
+3. The [Docker image workflow](../.github/workflows/docker.yml) pushes `ghcr.io/marshin386/radarr:v7.0.3-folders.2`.
 
 Do not force-push or delete `develop`. The repository ruleset rejects both.
 
@@ -36,7 +36,7 @@ Do not force-push or delete `develop`. The repository ruleset rejects both.
 | --- | --- |
 | Any branch except `develop` (including this PR branch) | `testing`, the branch name (`/` becomes `-`), and `sha-<commit>` |
 | `develop` | `latest` and `sha-<commit>` |
-| Tag `v7.0.3-folders.1` | `v7.0.3-folders.1` |
+| Tag `v7.0.3-folders.2` | `v7.0.3-folders.2` |
 
 To test this pull request after the workflow succeeds:
 
@@ -76,7 +76,7 @@ Resolve conflicts, keep `distribution/fork-version` and the folder-layout code, 
 
 ## Test container next to an existing Radarr
 
-Back up the Radarr config you copy. Migration 244 adds columns and **cannot be rolled back** by starting the official image on the same database. Use a copy, and do not point this container at the live `/config`.
+Back up the Radarr config you copy. Migrations 244–247 add columns and **cannot be rolled back** by starting the official image on the same database. Use a copy, and do not point this container at the live `/config`.
 
 The container matches the usual Radarr image: port **7878** inside the container, app data in **`/config`**, and `PUID`, `PGID`, `TZ`, and `UMASK`. An existing config folder (the one that contains `config.xml` and `radarr.db`) mounts at `/config`. The app listens on the `Port` value in that `config.xml` (7878 unless you changed it). The image sets the update mechanism to Docker in the **copy** of `config.xml`, so this container does not replace itself with official Radarr.
 
@@ -91,8 +91,8 @@ For Portainer, paste [docker-compose.sample.yml](docker-compose.sample.yml) as a
 # PUID and PGID should be the user and group that own the files (the same IDs as your existing Radarr).
 # TZ is an IANA zone name, for example America/New_York or Europe/London.
 #
-# Back up the copied config first. This image runs database migration 244, and that
-# migration cannot be rolled back. Do not mount the live Radarr config folder, and do
+# Back up the copied config first. This image runs database migrations 244-247, and those
+# migrations cannot be rolled back. Do not mount the live Radarr config folder, and do
 # not point the official Radarr image at this copy afterward.
 #
 # The container listens on 7878. Host port 7879 keeps it off the existing Radarr port.
@@ -128,7 +128,7 @@ services:
   # Pin a version tag from a git tag (docs/FORK.md). Do not use :testing for a library you keep.
   #
   # radarr:
-  #   image: ghcr.io/marshin386/radarr:v7.0.3-folders.1
+  #   image: ghcr.io/marshin386/radarr:v7.0.3-folders.2
   #   container_name: radarr
   #   environment:
   #     - PUID=1000
@@ -143,4 +143,4 @@ services:
   #   restart: unless-stopped
 ```
 
-Open `http://<host>:7879`. About should show version `7.0.3-folders.1`. Add or edit a root folder and set its layout to **Flat** or **Custom nested folders** before importing into the copied library. Leave the production container on its own port and its own config.
+Open `http://<host>:7879`. About should show version `7.0.3-folders.2`. Add or edit a root folder and set its layout to **Flat** or **Custom nested folders** before importing into the copied library. Leave the production container on its own port and its own config.

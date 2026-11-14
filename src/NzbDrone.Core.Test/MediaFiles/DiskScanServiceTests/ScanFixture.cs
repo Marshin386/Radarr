@@ -448,5 +448,32 @@ namespace NzbDrone.Core.Test.MediaFiles.DiskScanServiceTests
             Mocker.GetMock<IEventAggregator>()
                 .Verify(v => v.PublishEvent(It.Is<MovieScannedEvent>(c => c.Movie != null && c.PossibleExtraFiles.Count == 0)), Times.Once());
         }
+
+        [Test]
+        public void should_not_import_a_kept_original_file()
+        {
+            GivenMovieFolder();
+
+            var keptFile = Path.Combine(_movie.Path, "Movie (2019) WEBDL-1080p.mkv").AsOsAgnostic();
+            var currentFile = Path.Combine(_movie.Path, "Movie (2019) Bluray-2160p.mkv").AsOsAgnostic();
+
+            GivenFiles(new List<string> { keptFile, currentFile });
+
+            Mocker.GetMock<IKeptMovieFileRepository>()
+                .Setup(repository => repository.GetByMovieId(_movie.Id))
+                .Returns(new List<KeptMovieFile>
+                {
+                    new KeptMovieFile { MovieId = _movie.Id, Path = keptFile }
+                });
+
+            Subject.Scan(_movie);
+
+            Mocker.GetMock<IMakeImportDecision>()
+                .Verify(v => v.GetImportDecisions(
+                        It.Is<List<string>>(files => files.Count == 1 && files[0] == currentFile),
+                        _movie,
+                        false),
+                    Times.Once());
+        }
     }
 }

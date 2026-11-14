@@ -3,7 +3,7 @@ name: Docker image
 # Publishes ghcr.io/marshin386/radarr.
 # Non-default branches (including this PR branch): testing, the branch name, and sha-<commit>.
 # develop: latest and sha-<commit>. testing stays off the default branch.
-# A git tag such as v7.0.3-folders.1 is published under that exact name.
+# A git tag such as v7.0.3-folders.2 is published under that exact name.
 on:
   push:
     branches:

@@ -16,7 +16,7 @@ namespace NzbDrone.Common.Test.EnvironmentInfo
         [Test]
         public void should_report_fork_version()
         {
-            BuildInfo.VersionString.Should().Be("7.0.3-folders.1");
+            BuildInfo.VersionString.Should().Be("7.0.3-folders.2");
         }
 
         [Test]
