@@ -148,6 +148,7 @@ namespace Radarr.Api.V3.ImportLists
                 resource.Title = translation?.Title ?? resource.Title;
                 resource.Overview = translation?.Overview ?? resource.Overview;
                 resource.Folder = _fileNameBuilder.GetMovieFolder(currentMovie, namingConfig);
+                resource.CustomFolder = _fileNameBuilder.GetCustomMovieFolder(currentMovie, namingConfig);
                 resource.IsRecommendation = isRecommendation;
                 resource.IsTrending = isTrending;
                 resource.IsPopular = isPopular;
@@ -180,6 +181,11 @@ namespace Radarr.Api.V3.ImportLists
                 resource.Title = translation?.Title ?? resource.Title;
                 resource.Overview = translation?.Overview ?? resource.Overview;
                 resource.Folder = _fileNameBuilder.GetMovieFolder(new Movie
+                {
+                    MovieMetadata = currentMovie.MovieMetadata
+                },
+                    namingConfig);
+                resource.CustomFolder = _fileNameBuilder.GetCustomMovieFolder(new Movie
                 {
                     MovieMetadata = currentMovie.MovieMetadata
                 },

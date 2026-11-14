@@ -183,6 +183,7 @@ namespace Radarr.Api.V3.Collections
 
                         var movieResource = movie.ToResource(translation);
                         movieResource.Folder = _fileNameBuilder.GetMovieFolder(new Movie { MovieMetadata = movie }, namingConfig);
+                        movieResource.CustomFolder = _fileNameBuilder.GetCustomMovieFolder(new Movie { MovieMetadata = movie }, namingConfig);
 
                         var isExisting = existingMoviesTmdbIds.Contains(movie.TmdbId);
                         movieResource.IsExisting = isExisting;
@@ -220,6 +221,7 @@ namespace Radarr.Api.V3.Collections
 
                 var movieResource = movie.ToResource(translation);
                 movieResource.Folder = _fileNameBuilder.GetMovieFolder(new Movie { MovieMetadata = movie }, namingConfig);
+                movieResource.CustomFolder = _fileNameBuilder.GetCustomMovieFolder(new Movie { MovieMetadata = movie }, namingConfig);
 
                 var isExisting = existingMoviesTmdbIds.Contains(movie.TmdbId);
                 movieResource.IsExisting = isExisting;

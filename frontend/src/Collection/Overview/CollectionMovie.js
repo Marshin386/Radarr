@@ -70,6 +70,7 @@ class CollectionMovie extends Component {
       monitored,
       hasFile,
       folder,
+      customFolder,
       isAvailable,
       movieFile,
       isExistingMovie,
@@ -174,6 +175,7 @@ class CollectionMovie extends Component {
           overview={overview}
           images={images}
           folder={folder}
+          customFolder={customFolder}
           onModalClose={this.onAddMovieModalClose}
           collectionId={collectionId}
         />
@@ -199,6 +201,7 @@ CollectionMovie.propTypes = {
   collectionId: PropTypes.number.isRequired,
   hasFile: PropTypes.bool,
   folder: PropTypes.string,
+  customFolder: PropTypes.string,
   isAvailable: PropTypes.bool,
   movieFile: PropTypes.object,
   images: PropTypes.arrayOf(PropTypes.object).isRequired,

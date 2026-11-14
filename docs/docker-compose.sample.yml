@@ -43,7 +43,7 @@ services:
   # Pin a version tag from a git tag (docs/FORK.md). Do not use :testing for a library you keep.
   #
   # radarr:
-  #   image: ghcr.io/marshin386/radarr:v7.0.3-folders.2
+  #   image: ghcr.io/marshin386/radarr:v7.0.3-folders.3
   #   container_name: radarr
   #   environment:
   #     - PUID=1000

@@ -13,6 +13,8 @@ if [ -f "/usr/share/zoneinfo/${TZ}" ]; then
     printf '%s\n' "${TZ}" > /etc/timezone
 fi
 
+# Inherited by Radarr across exec. .NET creates new files as 0666 and new
+# directories as 0777, then the kernel applies this mask.
 umask "${UMASK}"
 
 if getent group radarr >/dev/null 2>&1; then
@@ -28,7 +30,10 @@ else
 fi
 
 mkdir -p /config
-chown radarr:radarr /config
+# The directory and anything already in it (config.xml, logs, the database)
+# have to be owned by PUID:PGID. A non-recursive chown leaves files from a
+# previous root run or a different PUID unreadable by the user Radarr drops to.
+chown -R radarr:radarr /config
 
 cd /app/radarr/bin
 exec gosu radarr:radarr /app/radarr/bin/Radarr -nobrowser -data=/config

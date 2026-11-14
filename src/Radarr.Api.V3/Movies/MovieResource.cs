@@ -73,6 +73,10 @@ namespace Radarr.Api.V3.Movies
         public string TitleSlug { get; set; }
         public string RootFolderPath { get; set; }
         public string Folder { get; set; }
+
+        // Rendered custom folder format. Set on lookup results. Null on ordinary movie resources.
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public string CustomFolder { get; set; }
         public string Certification { get; set; }
         public List<string> Genres { get; set; }
         public List<string> Keywords { get; set; }

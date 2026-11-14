@@ -86,6 +86,7 @@ class DiscoverMovieOverview extends Component {
       youTubeTrailerId,
       title,
       folder,
+      customFolder,
       year,
       overview,
       images,
@@ -274,6 +275,7 @@ class DiscoverMovieOverview extends Component {
           year={year}
           overview={overview}
           folder={folder}
+          customFolder={customFolder}
           images={images}
           onModalClose={this.onAddMovieModalClose}
         />
@@ -296,6 +298,7 @@ DiscoverMovieOverview.propTypes = {
   youTubeTrailerId: PropTypes.string,
   title: PropTypes.string.isRequired,
   folder: PropTypes.string.isRequired,
+  customFolder: PropTypes.string,
   year: PropTypes.number.isRequired,
   overview: PropTypes.string.isRequired,
   status: PropTypes.string.isRequired,

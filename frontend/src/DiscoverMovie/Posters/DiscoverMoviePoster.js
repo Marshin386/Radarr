@@ -86,6 +86,7 @@ class DiscoverMoviePoster extends Component {
       year,
       overview,
       folder,
+      customFolder,
       images,
       posterWidth,
       posterHeight,
@@ -253,6 +254,7 @@ class DiscoverMoviePoster extends Component {
           year={year}
           overview={overview}
           folder={folder}
+          customFolder={customFolder}
           images={images}
           onModalClose={this.onAddMovieModalClose}
         />
@@ -277,6 +279,7 @@ DiscoverMoviePoster.propTypes = {
   year: PropTypes.number.isRequired,
   overview: PropTypes.string.isRequired,
   folder: PropTypes.string.isRequired,
+  customFolder: PropTypes.string,
   status: PropTypes.string.isRequired,
   images: PropTypes.arrayOf(PropTypes.object).isRequired,
   posterWidth: PropTypes.number.isRequired,

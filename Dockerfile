@@ -115,8 +115,27 @@ RUN set -eux; \
 COPY distribution/docker/entrypoint.sh /entrypoint.sh
 COPY --from=build /out/bin /app/radarr/bin
 COPY --from=build /out/package_info /app/radarr/package_info
-RUN chmod +x /entrypoint.sh /app/radarr/bin/Radarr \
-    && mkdir -p /config
+# Openur.FFprobeStatic stores ffprobe as zip mode 0644 for every RID, including
+# linux-x64 and linux-arm64. NuGet on Linux ignores that mode and creates each
+# extracted file with creat(0766). The SDK umask 022 turns 0766 into 0744
+# (rwxr--r--), so only root can execute ffprobe. Radarr runs as PUID and looks
+# for ffprobe beside the app, which is why imports fail with
+# "Unable to determine if file is a sample" until someone chmod's the binary.
+# The same extraction applies to the rest of the published output.
+# chmod 755 the known binaries first so a 0644 ffprobe is fixed too, then give
+# every other file read access and every directory or already-executable file
+# access for users other than root.
+RUN set -eu; \
+    chmod 755 /entrypoint.sh /app/radarr/bin/Radarr /app/radarr/bin/ffprobe; \
+    find /app -type d -exec chmod a+rx {} +; \
+    find /app -type f -exec chmod a+r {} +; \
+    find /app -type f -perm /111 -exec chmod a+x {} +; \
+    test -x /app/radarr/bin/Radarr; \
+    test -x /app/radarr/bin/ffprobe; \
+    test -r /app/radarr/package_info; \
+    test -d /app/radarr/bin/UI; \
+    mkdir -p /config; \
+    chmod 755 /config
 
 ENV PUID=1000 \
     PGID=1000 \
