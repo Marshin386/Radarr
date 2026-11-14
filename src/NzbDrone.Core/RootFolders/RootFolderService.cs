@@ -34,6 +34,7 @@ namespace NzbDrone.Core.RootFolders
         private readonly IDiskProvider _diskProvider;
         private readonly IMovieRepository _movieRepository;
         private readonly IMediaFileService _mediaFileService;
+        private readonly IKeptMovieFileRepository _keptMovieFileRepository;
         private readonly IConfigService _configService;
         private readonly INamingConfigService _namingConfigService;
         private readonly Logger _logger;
@@ -57,6 +58,7 @@ namespace NzbDrone.Core.RootFolders
                                  IDiskProvider diskProvider,
                                  IMovieRepository movieRepository,
                                  IMediaFileService mediaFileService,
+                                 IKeptMovieFileRepository keptMovieFileRepository,
                                  IConfigService configService,
                                  INamingConfigService namingConfigService,
                                  ICacheManager cacheManager,
@@ -66,6 +68,7 @@ namespace NzbDrone.Core.RootFolders
             _diskProvider = diskProvider;
             _movieRepository = movieRepository;
             _mediaFileService = mediaFileService;
+            _keptMovieFileRepository = keptMovieFileRepository;
             _configService = configService;
             _namingConfigService = namingConfigService;
             _logger = logger;
@@ -193,9 +196,14 @@ namespace NzbDrone.Core.RootFolders
                 return results;
             }
 
+            var keptPaths = KeptFilePaths();
+            var keptDirectories = new HashSet<string>(
+                keptPaths.Select(filePath => Path.GetDirectoryName(filePath)).Where(directory => directory.IsNotNullOrWhiteSpace()),
+                PathEqualityComparer.Instance);
+
             if (GetFolderLayout(path) != MovieFolderLayout.MovieFolder)
             {
-                return GetUnmappedMovieFiles(path, moviePaths);
+                return GetUnmappedMovieFiles(path, moviePaths, keptPaths);
             }
 
             var subFolderDepth = _namingConfigService.GetConfig().MovieFolderFormat.Count(f => f == Path.DirectorySeparatorChar);
@@ -216,6 +224,11 @@ namespace NzbDrone.Core.RootFolders
             foreach (var unmappedFolder in unmappedFolders)
             {
                 var di = new DirectoryInfo(unmappedFolder.Normalize());
+
+                if (keptDirectories.Contains(di.FullName))
+                {
+                    continue;
+                }
 
                 if ((!di.Attributes.HasFlag(FileAttributes.System) && !di.Attributes.HasFlag(FileAttributes.Hidden)) || di.Attributes.ToString() == "-1")
                 {
@@ -311,7 +324,16 @@ namespace NzbDrone.Core.RootFolders
             return possibleRootFolder.Path.GetCleanPath();
         }
 
-        private List<UnmappedFolder> GetUnmappedMovieFiles(string path, Dictionary<int, string> moviePaths)
+        private HashSet<string> KeptFilePaths()
+        {
+            return new HashSet<string>(
+                (_keptMovieFileRepository.All() ?? Enumerable.Empty<KeptMovieFile>())
+                    .Select(file => file.Path)
+                    .Where(filePath => filePath.IsNotNullOrWhiteSpace()),
+                PathEqualityComparer.Instance);
+        }
+
+        private List<UnmappedFolder> GetUnmappedMovieFiles(string path, Dictionary<int, string> moviePaths, HashSet<string> keptPaths)
         {
             _logger.Debug("Generating list of unmapped movie files for {0}", path);
 
@@ -345,7 +367,7 @@ namespace NzbDrone.Core.RootFolders
                     continue;
                 }
 
-                if (mappedSharedFiles.Contains(file) || IsInsideDedicatedMovieFolder(file, moviePaths))
+                if (mappedSharedFiles.Contains(file) || keptPaths.Contains(file) || IsInsideDedicatedMovieFolder(file, moviePaths))
                 {
                     continue;
                 }

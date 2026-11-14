@@ -25,18 +25,21 @@ namespace NzbDrone.Core.Movies
         private readonly IRootFolderService _rootFolderService;
         private readonly IMovieRepository _movieRepository;
         private readonly IMediaFileService _mediaFileService;
+        private readonly IKeptMovieFileRepository _keptMovieFileRepository;
         private readonly IDiskProvider _diskProvider;
         private readonly Logger _logger;
 
         public MovieLayoutService(IRootFolderService rootFolderService,
                                   IMovieRepository movieRepository,
                                   IMediaFileService mediaFileService,
+                                  IKeptMovieFileRepository keptMovieFileRepository,
                                   IDiskProvider diskProvider,
                                   Logger logger)
         {
             _rootFolderService = rootFolderService;
             _movieRepository = movieRepository;
             _mediaFileService = mediaFileService;
+            _keptMovieFileRepository = keptMovieFileRepository;
             _diskProvider = diskProvider;
             _logger = logger;
         }
@@ -69,6 +72,7 @@ namespace NzbDrone.Core.Movies
 
             var ownedByOthers = OtherMovieFilePaths(movie);
             var otherMovies = OtherMoviesSharingPath(movie);
+            var keptPaths = KeptPaths(movie);
             var selected = new List<string>();
 
             foreach (var file in filesOnDisk)
@@ -76,6 +80,12 @@ namespace NzbDrone.Core.Movies
                 if (ownedByThisMovie.Contains(file))
                 {
                     selected.Add(file);
+                    continue;
+                }
+
+                if (keptPaths.Contains(file))
+                {
+                    _logger.Debug("Skipping kept original file: {0}", file);
                     continue;
                 }
 
@@ -187,6 +197,15 @@ namespace NzbDrone.Core.Movies
             }
 
             return paths.Distinct(PathEqualityComparer.Instance).ToList();
+        }
+
+        private HashSet<string> KeptPaths(Movie movie)
+        {
+            var kept = movie == null ? null : _keptMovieFileRepository.GetByMovieId(movie.Id);
+
+            return new HashSet<string>(
+                (kept ?? new List<KeptMovieFile>()).Select(file => file.Path).Where(path => path.IsNotNullOrWhiteSpace()),
+                PathEqualityComparer.Instance);
         }
 
         private HashSet<string> OtherMovieFilePaths(Movie movie)

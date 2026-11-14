@@ -81,6 +81,24 @@ namespace NzbDrone.Core.Test.MovieTests
         }
 
         [Test]
+        public void should_not_select_a_kept_original_in_a_shared_folder()
+        {
+            var nocturnalFile = Path.Combine(_root, "Nocturnal Animals (2016).mkv");
+            var heatFile = Path.Combine(_root, "Heat (1995).mkv");
+
+            Mocker.GetMock<IKeptMovieFileRepository>()
+                .Setup(repository => repository.GetByMovieId(_nocturnal.Id))
+                .Returns(new List<KeptMovieFile>
+                {
+                    new KeptMovieFile { MovieId = _nocturnal.Id, Path = nocturnalFile }
+                });
+
+            var selected = Subject.SelectVideoFiles(_nocturnal, new List<string> { nocturnalFile, heatFile });
+
+            selected.Should().BeEmpty();
+        }
+
+        [Test]
         public void should_keep_every_file_for_a_dedicated_movie_folder()
         {
             Mocker.GetMock<IRootFolderService>()

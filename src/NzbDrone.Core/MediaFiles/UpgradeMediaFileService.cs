@@ -26,6 +26,7 @@ namespace NzbDrone.Core.MediaFiles
         private readonly IBuildMoviePaths _moviePathBuilder;
         private readonly IMovieService _movieService;
         private readonly IRootFolderService _rootFolderService;
+        private readonly IKeptMovieFileRepository _keptMovieFileRepository;
         private readonly Logger _logger;
 
         public UpgradeMediaFileService(IRecycleBinProvider recycleBinProvider,
@@ -35,6 +36,7 @@ namespace NzbDrone.Core.MediaFiles
                                        IBuildMoviePaths moviePathBuilder,
                                        IMovieService movieService,
                                        IRootFolderService rootFolderService,
+                                       IKeptMovieFileRepository keptMovieFileRepository,
                                        Logger logger)
         {
             _recycleBinProvider = recycleBinProvider;
@@ -44,6 +46,7 @@ namespace NzbDrone.Core.MediaFiles
             _moviePathBuilder = moviePathBuilder;
             _movieService = movieService;
             _rootFolderService = rootFolderService;
+            _keptMovieFileRepository = keptMovieFileRepository;
             _logger = logger;
         }
 
@@ -70,20 +73,40 @@ namespace NzbDrone.Core.MediaFiles
                 var movieFilePath = Path.Combine(oldMoviePath, existingFile.RelativePath);
                 var subfolder = rootFolder.GetRelativePath(_diskProvider.GetParentFolder(movieFilePath));
                 string recycleBinPath = null;
+                var keepOriginal = ShouldKeepOriginalFile(localMovie.Movie.QualityProfile);
+                var fileExists = _diskProvider.FileExists(movieFilePath);
 
-                if (_diskProvider.FileExists(movieFilePath))
+                if (keepOriginal)
                 {
-                    _logger.Debug("Removing existing movie file: {0}", existingFile);
-                    recycleBinPath = _recycleBinProvider.DeleteFile(movieFilePath, subfolder);
-                    RemoveMatchingSidecars(movieFilePath, subfolder);
+                    if (fileExists)
+                    {
+                        _logger.Info("Keeping existing movie file on disk, untracked: {0}", movieFilePath);
+                        _keptMovieFileRepository.Remember(localMovie.Movie.Id, movieFilePath);
+                    }
+                    else
+                    {
+                        _logger.Warn("Existing movie file missing from disk: {0}", movieFilePath);
+                    }
+
+                    moveFileResult.OldFiles.Add(new DeletedMovieFile(existingFile, null));
+                    _mediaFileService.Delete(existingFile, DeleteMediaFileReason.UpgradeKept);
                 }
                 else
                 {
-                    _logger.Warn("Existing movie file missing from disk: {0}", movieFilePath);
-                }
+                    if (fileExists)
+                    {
+                        _logger.Debug("Removing existing movie file: {0}", existingFile);
+                        recycleBinPath = _recycleBinProvider.DeleteFile(movieFilePath, subfolder);
+                        RemoveMatchingSidecars(movieFilePath, subfolder);
+                    }
+                    else
+                    {
+                        _logger.Warn("Existing movie file missing from disk: {0}", movieFilePath);
+                    }
 
-                moveFileResult.OldFiles.Add(new DeletedMovieFile(existingFile, recycleBinPath));
-                _mediaFileService.Delete(existingFile, DeleteMediaFileReason.Upgrade);
+                    moveFileResult.OldFiles.Add(new DeletedMovieFile(existingFile, recycleBinPath));
+                    _mediaFileService.Delete(existingFile, DeleteMediaFileReason.Upgrade);
+                }
             }
 
             if (newMoviePath.IsNotNullOrWhiteSpace() && !newMoviePath.PathEquals(oldMoviePath))
@@ -127,6 +150,15 @@ namespace NzbDrone.Core.MediaFiles
             }
 
             return _moviePathBuilder.BuildLibraryPath(movie, profile.UpgradeDestination);
+        }
+
+        private static bool ShouldKeepOriginalFile(QualityProfile profile)
+        {
+            return profile != null &&
+                   profile.KeepOriginalFile &&
+                   profile.UpgradeAllowed &&
+                   profile.UpgradeFilePlacement == UpgradeFilePlacement.MoveToDesignatedLocation &&
+                   profile.UpgradeDestination.IsNotNullOrWhiteSpace();
         }
 
         private void RemoveMatchingSidecars(string movieFilePath, string subfolder)

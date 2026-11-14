@@ -2063,6 +2063,8 @@
   "UpgradeFilePlacementMove": "Move to designated location",
   "UpgradeDestination": "Upgrade Destination",
   "UpgradeDestinationHelpText": "Existing, writable folder. Upgrades are stored here using the current Library Structure, and the movie path is changed to match.",
+  "KeepOriginalFile": "Keep Original File",
+  "KeepOriginalFileHelpText": "Leave the existing file on disk and stop tracking it. Radarr follows the new file at the destination. A later disk scan does not import the kept file.",
   "UpgradesAllowedHelpText": "If disabled qualities will not be upgraded",
   "Uppercase": "Uppercase",
   "Uptime": "Uptime",

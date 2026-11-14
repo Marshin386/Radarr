@@ -188,5 +188,135 @@ namespace NzbDrone.Core.Test.MediaFiles
             _localMovie.Movie.Path.Should().Be(oldPath);
             Mocker.GetMock<IMovieService>().Verify(service => service.UpdateMovie(It.IsAny<Movie>()), Times.Never());
         }
+
+        [Test]
+        public void should_keep_the_original_file_when_the_profile_moves_the_upgrade()
+        {
+            GivenSingleMovieWithSingleMovieFile();
+
+            var destination = @"C:\Upgrades".AsOsAgnostic();
+            var oldPath = _localMovie.Movie.Path;
+            var originalFile = Path.Combine(oldPath, _localMovie.Movie.MovieFile.RelativePath);
+            _localMovie.Movie.Id = 42;
+            GivenMoveProfile(destination, keepOriginal: true);
+
+            Mocker.GetMock<IBuildMoviePaths>()
+                .Setup(builder => builder.BuildLibraryPath(_localMovie.Movie, destination))
+                .Returns(destination);
+
+            Mocker.GetMock<IDiskProvider>()
+                .Setup(disk => disk.FolderExists(destination))
+                .Returns(true);
+
+            Mocker.GetMock<IDiskProvider>()
+                .Setup(disk => disk.GetFiles(It.IsAny<string>(), false))
+                .Returns(new List<string> { originalFile, Path.Combine(oldPath, "A.Movie.2019.nfo") });
+
+            Mocker.GetMock<IRootFolderService>()
+                .Setup(service => service.GetBestRootFolderPath(oldPath, null))
+                .Returns(Directory.GetParent(oldPath).FullName);
+
+            var result = Subject.UpgradeMovieFile(_movieFile, _localMovie);
+
+            _localMovie.Movie.Path.Should().Be(destination);
+            result.OldFiles.Should().ContainSingle();
+            result.OldFiles[0].MovieFile.Should().BeSameAs(_localMovie.Movie.MovieFile);
+            result.OldFiles[0].RecycleBinPath.Should().BeNull();
+            Mocker.GetMock<IRecycleBinProvider>().Verify(bin => bin.DeleteFile(It.IsAny<string>(), It.IsAny<string>()), Times.Never());
+            Mocker.GetMock<IDiskProvider>().Verify(disk => disk.DeleteFolder(It.IsAny<string>(), It.IsAny<bool>()), Times.Never());
+            Mocker.GetMock<IKeptMovieFileRepository>()
+                .Verify(repository => repository.Remember(42, originalFile), Times.Once());
+            Mocker.GetMock<IMediaFileService>()
+                .Verify(service => service.Delete(_localMovie.Movie.MovieFile, DeleteMediaFileReason.UpgradeKept), Times.Once());
+            Mocker.GetMock<IMoveMovieFiles>()
+                .Verify(mover => mover.MoveMovieFile(It.IsAny<MovieFile>(), It.Is<LocalMovie>(local => local.Movie.Path == destination)), Times.Once());
+        }
+
+        [Test]
+        public void should_delete_the_original_when_keep_original_is_off()
+        {
+            GivenSingleMovieWithSingleMovieFile();
+
+            var destination = @"C:\Upgrades".AsOsAgnostic();
+            GivenMoveProfile(destination, keepOriginal: false);
+
+            Mocker.GetMock<IBuildMoviePaths>()
+                .Setup(builder => builder.BuildLibraryPath(_localMovie.Movie, destination))
+                .Returns(destination);
+
+            Mocker.GetMock<IDiskProvider>()
+                .Setup(disk => disk.FolderExists(destination))
+                .Returns(true);
+
+            Mocker.GetMock<IDiskProvider>()
+                .Setup(disk => disk.GetFiles(It.IsAny<string>(), false))
+                .Returns(new List<string>());
+
+            Mocker.GetMock<IDiskProvider>()
+                .Setup(disk => disk.GetDirectories(It.IsAny<string>()))
+                .Returns(new List<string>());
+
+            Mocker.GetMock<IRootFolderService>()
+                .Setup(service => service.GetBestRootFolderPath(It.IsAny<string>(), null))
+                .Returns(Directory.GetParent(_localMovie.Movie.Path).FullName);
+
+            Subject.UpgradeMovieFile(_movieFile, _localMovie);
+
+            Mocker.GetMock<IRecycleBinProvider>().Verify(bin => bin.DeleteFile(It.IsAny<string>(), It.IsAny<string>()), Times.Once());
+            Mocker.GetMock<IKeptMovieFileRepository>().Verify(repository => repository.Remember(It.IsAny<int>(), It.IsAny<string>()), Times.Never());
+            Mocker.GetMock<IMediaFileService>()
+                .Verify(service => service.Delete(_localMovie.Movie.MovieFile, DeleteMediaFileReason.Upgrade), Times.Once());
+        }
+
+        [Test]
+        public void should_ignore_keep_original_when_the_upgrade_replaces_in_place()
+        {
+            GivenSingleMovieWithSingleMovieFile();
+            _localMovie.Movie.QualityProfile = new QualityProfile
+            {
+                UpgradeAllowed = true,
+                UpgradeFilePlacement = UpgradeFilePlacement.ReplaceInCurrentLocation,
+                KeepOriginalFile = true
+            };
+
+            Subject.UpgradeMovieFile(_movieFile, _localMovie);
+
+            Mocker.GetMock<IRecycleBinProvider>().Verify(bin => bin.DeleteFile(It.IsAny<string>(), It.IsAny<string>()), Times.Once());
+            Mocker.GetMock<IKeptMovieFileRepository>().Verify(repository => repository.Remember(It.IsAny<int>(), It.IsAny<string>()), Times.Never());
+            Mocker.GetMock<IMediaFileService>()
+                .Verify(service => service.Delete(_localMovie.Movie.MovieFile, DeleteMediaFileReason.Upgrade), Times.Once());
+        }
+
+        [Test]
+        public void should_ignore_keep_original_when_upgrades_are_not_allowed()
+        {
+            GivenSingleMovieWithSingleMovieFile();
+            _localMovie.Movie.QualityProfile = new QualityProfile
+            {
+                UpgradeAllowed = false,
+                UpgradeFilePlacement = UpgradeFilePlacement.MoveToDesignatedLocation,
+                UpgradeDestination = @"C:\Upgrades".AsOsAgnostic(),
+                KeepOriginalFile = true
+            };
+
+            Subject.UpgradeMovieFile(_movieFile, _localMovie);
+
+            Mocker.GetMock<IRecycleBinProvider>().Verify(bin => bin.DeleteFile(It.IsAny<string>(), It.IsAny<string>()), Times.Once());
+            Mocker.GetMock<IKeptMovieFileRepository>().Verify(repository => repository.Remember(It.IsAny<int>(), It.IsAny<string>()), Times.Never());
+            Mocker.GetMock<IMediaFileService>()
+                .Verify(service => service.Delete(_localMovie.Movie.MovieFile, DeleteMediaFileReason.Upgrade), Times.Once());
+            Mocker.GetMock<IMovieService>().Verify(service => service.UpdateMovie(It.IsAny<Movie>()), Times.Never());
+        }
+
+        private void GivenMoveProfile(string destination, bool keepOriginal)
+        {
+            _localMovie.Movie.QualityProfile = new QualityProfile
+            {
+                UpgradeAllowed = true,
+                UpgradeFilePlacement = UpgradeFilePlacement.MoveToDesignatedLocation,
+                UpgradeDestination = destination,
+                KeepOriginalFile = keepOriginal
+            };
+        }
     }
 }

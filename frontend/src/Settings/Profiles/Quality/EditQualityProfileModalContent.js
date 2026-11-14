@@ -126,6 +126,7 @@ class EditQualityProfileModalContent extends Component {
       upgradeAllowed,
       upgradeFilePlacement,
       upgradeDestination,
+      keepOriginalFile,
       cutoff,
       minFormatScore,
       minUpgradeFormatScore,
@@ -245,6 +246,23 @@ class EditQualityProfileModalContent extends Component {
                                 value={upgradeDestination && upgradeDestination.value ? upgradeDestination.value : ''}
                                 includeFiles={false}
                                 helpText={translate('UpgradeDestinationHelpText')}
+                                onChange={onInputChange}
+                              />
+                            </FormGroup>
+                        }
+
+                        {
+                          upgradeAllowed.value && placement === 'moveToDesignatedLocation' &&
+                            <FormGroup size={sizes.EXTRA_SMALL} data-testid="keep-original-file">
+                              <FormLabel size={sizes.SMALL}>
+                                {translate('KeepOriginalFile')}
+                              </FormLabel>
+
+                              <FormInputGroup
+                                type={inputTypes.CHECK}
+                                name="keepOriginalFile"
+                                {...(keepOriginalFile || { value: false })}
+                                helpText={translate('KeepOriginalFileHelpText')}
                                 onChange={onInputChange}
                               />
                             </FormGroup>

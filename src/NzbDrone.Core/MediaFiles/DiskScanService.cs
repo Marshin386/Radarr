@@ -4,6 +4,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using NLog;
+using NzbDrone.Common;
 using NzbDrone.Common.Disk;
 using NzbDrone.Common.Extensions;
 using NzbDrone.Common.Instrumentation.Extensions;
@@ -40,6 +41,7 @@ namespace NzbDrone.Core.MediaFiles
         private readonly IMediaFileTableCleanupService _mediaFileTableCleanupService;
         private readonly IRootFolderService _rootFolderService;
         private readonly IMovieLayoutService _movieLayoutService;
+        private readonly IKeptMovieFileRepository _keptMovieFileRepository;
         private readonly IUpdateMediaInfo _updateMediaInfoService;
         private readonly IEventAggregator _eventAggregator;
         private readonly Logger _logger;
@@ -53,6 +55,7 @@ namespace NzbDrone.Core.MediaFiles
                                IMediaFileTableCleanupService mediaFileTableCleanupService,
                                IRootFolderService rootFolderService,
                                IMovieLayoutService movieLayoutService,
+                               IKeptMovieFileRepository keptMovieFileRepository,
                                IUpdateMediaInfo updateMediaInfoService,
                                IEventAggregator eventAggregator,
                                Logger logger)
@@ -66,6 +69,7 @@ namespace NzbDrone.Core.MediaFiles
             _mediaFileTableCleanupService = mediaFileTableCleanupService;
             _rootFolderService = rootFolderService;
             _movieLayoutService = movieLayoutService;
+            _keptMovieFileRepository = keptMovieFileRepository;
             _updateMediaInfoService = updateMediaInfoService;
             _eventAggregator = eventAggregator;
             _logger = logger;
@@ -139,7 +143,7 @@ namespace NzbDrone.Core.MediaFiles
             CleanMediaFiles(movie, mediaFileList);
 
             var movieFiles = _mediaFileService.GetFilesByMovie(movie.Id);
-            var unmappedFiles = MediaFileService.FilterExistingFiles(mediaFileList, movieFiles, movie);
+            var unmappedFiles = ExcludeKeptFiles(movie, MediaFileService.FilterExistingFiles(mediaFileList, movieFiles, movie));
 
             var decisionsStopwatch = Stopwatch.StartNew();
             var decisions = _importDecisionMaker.GetImportDecisions(unmappedFiles, movie, false);
@@ -188,6 +192,29 @@ namespace NzbDrone.Core.MediaFiles
 
             RemoveEmptyMovieFolder(movie);
             CompletedScanning(movie, possibleExtraFiles);
+        }
+
+        private List<string> ExcludeKeptFiles(Movie movie, List<string> files)
+        {
+            var kept = _keptMovieFileRepository.GetByMovieId(movie.Id);
+
+            if (kept == null || kept.Count == 0 || files == null || files.Count == 0)
+            {
+                return files ?? new List<string>();
+            }
+
+            var keptPaths = new HashSet<string>(
+                kept.Select(file => file.Path).Where(path => path.IsNotNullOrWhiteSpace()),
+                PathEqualityComparer.Instance);
+
+            var remaining = files.Where(file => !keptPaths.Contains(file)).ToList();
+
+            if (remaining.Count != files.Count)
+            {
+                _logger.Debug("Leaving {0} kept original file(s) untracked for {1}", files.Count - remaining.Count, movie);
+            }
+
+            return remaining;
         }
 
         private void CleanMediaFiles(Movie movie, List<string> mediaFileList)

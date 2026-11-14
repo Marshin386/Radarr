@@ -108,6 +108,10 @@ namespace NzbDrone.Core.Extras.Files
             {
                 _logger.Debug("Removing movie file from DB as part of cleanup routine, not deleting extra files from disk.");
             }
+            else if (message.Reason == DeleteMediaFileReason.UpgradeKept)
+            {
+                _logger.Debug("Keeping extra files on disk for untracked original movie file: {0}", movieFile);
+            }
             else
             {
                 var movie = _movieService.GetMovie(message.MovieFile.MovieId);

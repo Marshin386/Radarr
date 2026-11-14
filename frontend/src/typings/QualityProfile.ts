@@ -14,6 +14,7 @@ interface QualityProfile {
   upgradeAllowed: boolean;
   upgradeFilePlacement: 'replaceInCurrentLocation' | 'moveToDesignatedLocation';
   upgradeDestination?: string;
+  keepOriginalFile: boolean;
   cutoff: number;
   items: QualityProfileQualityItem[];
   minFormatScore: number;

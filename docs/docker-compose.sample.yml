@@ -6,8 +6,8 @@
 # PUID and PGID should be the user and group that own the files (the same IDs as your existing Radarr).
 # TZ is an IANA zone name, for example America/New_York or Europe/London.
 #
-# Back up the copied config first. This image runs database migration 244, and that
-# migration cannot be rolled back. Do not mount the live Radarr config folder, and do
+# Back up the copied config first. This image runs database migrations 244-247, and those
+# migrations cannot be rolled back. Do not mount the live Radarr config folder, and do
 # not point the official Radarr image at this copy afterward.
 #
 # The container listens on 7878. Host port 7879 keeps it off the existing Radarr port.
@@ -43,7 +43,7 @@ services:
   # Pin a version tag from a git tag (docs/FORK.md). Do not use :testing for a library you keep.
   #
   # radarr:
-  #   image: ghcr.io/marshin386/radarr:v7.0.3-folders.1
+  #   image: ghcr.io/marshin386/radarr:v7.0.3-folders.2
   #   container_name: radarr
   #   environment:
   #     - PUID=1000

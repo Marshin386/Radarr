@@ -42,7 +42,7 @@ namespace NzbDrone.Common.EnvironmentInfo
         public static Version Version { get; }
 
         /// <summary>
-        /// User-facing version. Fork builds use the informational version, for example 7.0.3-folders.1.
+        /// User-facing version. Fork builds use the informational version, for example 7.0.3-folders.2.
         /// </summary>
         public static string VersionString { get; }
         public static string Branch { get; }

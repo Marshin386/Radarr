@@ -23,7 +23,7 @@ Each root folder can use one of three layouts:
 When **Upgrades Allowed** is checked on a quality profile, **Upgraded File** chooses where the new file goes:
 
 - **Replace in current location** (default): the upgrade replaces the file in the movie's current folder, the same as official Radarr.
-- **Move to designated location**: the upgrade is stored under a chosen **Upgrade Destination** folder using the current Library Structure, and the movie path is updated to match.
+- **Move to designated location**: the upgrade is stored under a chosen **Upgrade Destination** folder using the current Library Structure, and the movie path is updated to match. **Keep Original File** (off by default, only shown for this choice) leaves the previous file on disk and stops tracking it. Radarr follows the new file.
 
 Library import lists files instead of treating each subfolder as one movie. Disk scan and rescan only attach files that parse as that movie. Downloads and renames stay in the movie's folder (the root, for a flat library). Deleting a movie removes that movie's file and sidecars that match its filename, and does not delete a shared directory or other movies' files.
 
@@ -32,7 +32,7 @@ The fork version is shown in **System → About**. The published image is `ghcr.
 > [!WARNING]
 > **Back up your Radarr config before switching**
 >
-> This fork upgrades the database (migrations 244–246). Starting official Radarr on that same database is not supported. Test with a copy of the config folder, and keep a backup of the original.
+> This fork upgrades the database (migrations 244–247). Starting official Radarr on that same database is not supported. Test with a copy of the config folder, and keep a backup of the original.
 
 ### Support for this fork
 
