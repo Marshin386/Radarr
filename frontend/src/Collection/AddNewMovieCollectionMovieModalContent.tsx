@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
+import AddMovieRootFolderInput from 'AddMovie/AddNewMovie/AddMovieRootFolderInput';
 import MovieMinimumAvailabilityPopoverContent from 'AddMovie/MovieMinimumAvailabilityPopoverContent';
 import AppState from 'App/State/AppState';
 import useMovieCollection from 'Collection/useMovieCollection';
@@ -38,6 +39,7 @@ export interface AddNewMovieCollectionMovieModalContentProps {
   images: Image[];
   collectionId: number;
   folder: string;
+  customFolder?: string;
   onModalClose: () => void;
 }
 
@@ -49,6 +51,7 @@ function AddNewMovieCollectionMovieModalContent({
   images,
   collectionId,
   folder,
+  customFolder,
   onModalClose,
 }: AddNewMovieCollectionMovieModalContentProps) {
   const dispatch = useDispatch();
@@ -159,20 +162,11 @@ function AddNewMovieCollectionMovieModalContent({
               <FormGroup>
                 <FormLabel>{translate('RootFolder')}</FormLabel>
 
-                <FormInputGroup
-                  type={inputTypes.ROOT_FOLDER_SELECT}
+                <AddMovieRootFolderInput
                   name="rootFolderPath"
-                  valueOptions={{
-                    movieFolder: folder,
-                    isWindows,
-                  }}
-                  selectedValueOptions={{
-                    movieFolder: folder,
-                    isWindows,
-                  }}
-                  helpText={translate('AddNewMovieRootFolderHelpText', {
-                    folder,
-                  })}
+                  movieFolder={folder}
+                  customFolder={customFolder}
+                  isWindows={isWindows}
                   {...rootFolderPath}
                   onChange={handleInputChange}
                 />

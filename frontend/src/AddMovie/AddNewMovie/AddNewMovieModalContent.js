@@ -16,6 +16,7 @@ import Popover from 'Components/Tooltip/Popover';
 import { icons, inputTypes, kinds, tooltipPositions } from 'Helpers/Props';
 import MoviePoster from 'Movie/MoviePoster';
 import translate from 'Utilities/String/translate';
+import AddMovieRootFolderInput from './AddMovieRootFolderInput';
 import styles from './AddNewMovieModalContent.css';
 
 class AddNewMovieModalContent extends Component {
@@ -47,6 +48,7 @@ class AddNewMovieModalContent extends Component {
       minimumAvailability,
       searchForMovie,
       folder,
+      customFolder,
       tags,
       isSmallScreen,
       isWindows,
@@ -87,20 +89,11 @@ class AddNewMovieModalContent extends Component {
                 <FormGroup>
                   <FormLabel>{translate('RootFolder')}</FormLabel>
 
-                  <FormInputGroup
-                    type={inputTypes.ROOT_FOLDER_SELECT}
+                  <AddMovieRootFolderInput
                     name="rootFolderPath"
-                    valueOptions={{
-                      movieFolder: folder,
-                      isWindows
-                    }}
-                    selectedValueOptions={{
-                      movieFolder: folder,
-                      isWindows
-                    }}
-                    helpText={translate('AddNewMovieRootFolderHelpText', {
-                      folder
-                    })}
+                    movieFolder={folder}
+                    customFolder={customFolder}
+                    isWindows={isWindows}
                     onChange={onInputChange}
                     {...rootFolderPath}
                   />
@@ -213,6 +206,7 @@ AddNewMovieModalContent.propTypes = {
   minimumAvailability: PropTypes.object.isRequired,
   searchForMovie: PropTypes.object.isRequired,
   folder: PropTypes.string.isRequired,
+  customFolder: PropTypes.string,
   tags: PropTypes.object.isRequired,
   isSmallScreen: PropTypes.bool.isRequired,
   isWindows: PropTypes.bool.isRequired,

@@ -74,6 +74,7 @@ class DiscoverMovieRow extends Component {
       year,
       overview,
       folder,
+      customFolder,
       images,
       genres,
       ratings,
@@ -449,6 +450,7 @@ class DiscoverMovieRow extends Component {
           year={year}
           overview={overview}
           folder={folder}
+          customFolder={customFolder}
           images={images}
           onModalClose={this.onAddMovieModalClose}
         />
@@ -475,6 +477,7 @@ DiscoverMovieRow.propTypes = {
   year: PropTypes.number.isRequired,
   overview: PropTypes.string.isRequired,
   folder: PropTypes.string.isRequired,
+  customFolder: PropTypes.string,
   images: PropTypes.arrayOf(PropTypes.object).isRequired,
   studio: PropTypes.string,
   inCinemas: PropTypes.string,

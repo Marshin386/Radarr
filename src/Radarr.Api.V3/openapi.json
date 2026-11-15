@@ -8116,6 +8116,10 @@
             "type": "string",
             "nullable": true
           },
+          "customFolder": {
+            "type": "string",
+            "nullable": true
+          },
           "isExisting": {
             "type": "boolean"
           },
@@ -9605,6 +9609,10 @@
             "format": "int32"
           },
           "folder": {
+            "type": "string",
+            "nullable": true
+          },
+          "customFolder": {
             "type": "string",
             "nullable": true
           },
@@ -11106,6 +11114,10 @@
             "nullable": true
           },
           "folder": {
+            "type": "string",
+            "nullable": true
+          },
+          "customFolder": {
             "type": "string",
             "nullable": true
           },

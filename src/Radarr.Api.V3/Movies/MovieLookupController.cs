@@ -109,6 +109,7 @@ namespace Radarr.Api.V3.Movies
                 }
 
                 resource.Folder = _fileNameBuilder.GetMovieFolder(currentMovie, namingConfig);
+                resource.CustomFolder = _fileNameBuilder.GetCustomMovieFolder(currentMovie, namingConfig);
 
                 resource.IsExcluded = listExclusions.Any(e => e.TmdbId == resource.TmdbId);
 

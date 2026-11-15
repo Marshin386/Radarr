@@ -35,6 +35,7 @@ namespace Radarr.Api.V3.ImportLists
         public string ImdbId { get; set; }
         public int TmdbId { get; set; }
         public string Folder { get; set; }
+        public string CustomFolder { get; set; }
         public string Certification { get; set; }
         public float Popularity { get; set; }
         public List<string> Genres { get; set; }
