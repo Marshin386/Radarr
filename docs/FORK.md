@@ -9,12 +9,12 @@ Fork versions are the upstream Radarr release this tree is based on, plus a `-fo
 | Piece | Current value |
 | --- | --- |
 | Upstream base | Radarr **7.0.3** (`majorVersion` in `azure-pipelines.yml` on this `develop`; the last published upstream tag before that bump was `v7.0.2.10888`) |
-| Fork revision | `folders.3` |
-| Full version | `7.0.3-folders.3` |
+| Fork revision | `folders.4` |
+| Full version | `7.0.3-folders.4` |
 
-`distribution/fork-version` is the only place that string is stored. The build stamps it as the assembly informational version, so System → About, the UI version, and the `X-Application-Version` header show `7.0.3-folders.3`. The numeric `AssemblyVersion` stays the upstream-style `10.0.0.*` placeholder because `System.Version` cannot hold a suffix.
+`distribution/fork-version` is the only place that string is stored. The build stamps it as the assembly informational version, so System → About, the UI version, and the `X-Application-Version` header show `7.0.3-folders.4`. The numeric `AssemblyVersion` stays the upstream-style `10.0.0.*` placeholder because `System.Version` cannot hold a suffix.
 
-Bump `N` for each fork release that does not move the upstream base (`7.0.3-folders.4`). When you merge a newer upstream Radarr, change the base too (`7.1.0-folders.1`) and reset `N` to 1.
+Bump `N` for each fork release that does not move the upstream base (`7.0.3-folders.5`). When you merge a newer upstream Radarr, change the base too (`7.1.0-folders.1`) and reset `N` to 1.
 
 ## Cut a release
 
@@ -22,11 +22,11 @@ Bump `N` for each fork release that does not move the upstream base (`7.0.3-fold
 2. Tag that commit. The tag name is the image tag:
 
    ```bash
-   git tag v7.0.3-folders.3
-   git push origin v7.0.3-folders.3
+   git tag v7.0.3-folders.4
+   git push origin v7.0.3-folders.4
    ```
 
-3. The [Docker image workflow](../.github/workflows/docker.yml) pushes `ghcr.io/marshin386/radarr:v7.0.3-folders.3`.
+3. The [Docker image workflow](../.github/workflows/docker.yml) pushes `ghcr.io/marshin386/radarr:v7.0.3-folders.4`.
 
 Do not force-push or delete `develop`. The repository ruleset rejects both.
 
@@ -36,7 +36,7 @@ Do not force-push or delete `develop`. The repository ruleset rejects both.
 | --- | --- |
 | Any branch except `develop` (including this PR branch) | `testing`, the branch name (`/` becomes `-`), and `sha-<commit>` |
 | `develop` | `latest` and `sha-<commit>` |
-| Tag `v7.0.3-folders.3` | `v7.0.3-folders.3` |
+| Tag `v7.0.3-folders.4` | `v7.0.3-folders.4` |
 
 To test this pull request after the workflow succeeds:
 
@@ -128,7 +128,7 @@ services:
   # Pin a version tag from a git tag (docs/FORK.md). Do not use :testing for a library you keep.
   #
   # radarr:
-  #   image: ghcr.io/marshin386/radarr:v7.0.3-folders.3
+  #   image: ghcr.io/marshin386/radarr:v7.0.3-folders.4
   #   container_name: radarr
   #   environment:
   #     - PUID=1000
@@ -143,4 +143,4 @@ services:
   #   restart: unless-stopped
 ```
 
-Open `http://<host>:7879`. About should show version `7.0.3-folders.3`. Add or edit a root folder and set its layout to **Flat** or **Custom nested folders** before importing into the copied library. Leave the production container on its own port and its own config.
+Open `http://<host>:7879`. About should show version `7.0.3-folders.4`. Add or edit a root folder and set its layout to **Flat** or **Custom nested folders** before importing into the copied library. Leave the production container on its own port and its own config.
