@@ -28,6 +28,10 @@ namespace NzbDrone.Core.Movies
         private readonly IKeptMovieFileRepository _keptMovieFileRepository;
         private readonly IDiskProvider _diskProvider;
         private readonly Logger _logger;
+        private readonly object _folderMoviesGate = new object();
+        private string _folderMoviesPath;
+        private List<Movie> _folderMovies = new List<Movie>();
+        private DateTime _folderMoviesUtc;
 
         public MovieLayoutService(IRootFolderService rootFolderService,
                                   IMovieRepository movieRepository,
@@ -211,16 +215,23 @@ namespace NzbDrone.Core.Movies
         private HashSet<string> OtherMovieFilePaths(Movie movie)
         {
             var paths = new HashSet<string>(PathEqualityComparer.Instance);
+            var others = OtherMoviesSharingPath(movie);
 
-            foreach (var other in OtherMoviesSharingPath(movie))
+            if (!others.Any())
             {
-                foreach (var file in _mediaFileService.GetFilesByMovie(other.Id) ?? new List<MovieFile>())
+                return paths;
+            }
+
+            var byId = others.ToDictionary(other => other.Id);
+
+            foreach (var file in _mediaFileService.GetFilesByMovies(byId.Keys) ?? new List<MovieFile>())
+            {
+                if (file.RelativePath.IsNullOrWhiteSpace() || !byId.TryGetValue(file.MovieId, out var other))
                 {
-                    if (file.RelativePath.IsNotNullOrWhiteSpace())
-                    {
-                        paths.Add(Path.Combine(other.Path, file.RelativePath));
-                    }
+                    continue;
                 }
+
+                paths.Add(Path.Combine(other.Path, file.RelativePath));
             }
 
             return paths;
@@ -228,22 +239,41 @@ namespace NzbDrone.Core.Movies
 
         private List<Movie> OtherMoviesSharingPath(Movie movie)
         {
-            if (movie?.Path.IsNullOrWhiteSpace() != false)
+            return MoviesSharingPath(movie?.Path).Where(other => other.Id != movie.Id).ToList();
+        }
+
+        private List<Movie> MoviesSharingPath(string path)
+        {
+            if (path.IsNullOrWhiteSpace())
             {
                 return new List<Movie>();
+            }
+
+            lock (_folderMoviesGate)
+            {
+                if (_folderMoviesPath.IsNotNullOrWhiteSpace() &&
+                    _folderMoviesPath.PathEquals(path) &&
+                    DateTime.UtcNow - _folderMoviesUtc < TimeSpan.FromMinutes(2))
+                {
+                    return _folderMovies;
+                }
             }
 
             var ids = (_movieRepository.AllMoviePaths() ?? new Dictionary<int, string>())
-                .Where(entry => entry.Key != movie.Id && entry.Value.IsNotNullOrWhiteSpace() && entry.Value.PathEquals(movie.Path))
+                .Where(entry => entry.Value.IsNotNullOrWhiteSpace() && entry.Value.PathEquals(path))
                 .Select(entry => entry.Key)
                 .ToList();
 
-            if (!ids.Any())
+            var movies = ids.Any() ? (_movieRepository.Get(ids)?.ToList() ?? new List<Movie>()) : new List<Movie>();
+
+            lock (_folderMoviesGate)
             {
-                return new List<Movie>();
+                _folderMoviesPath = path;
+                _folderMovies = movies;
+                _folderMoviesUtc = DateTime.UtcNow;
             }
 
-            return _movieRepository.Get(ids).ToList();
+            return movies;
         }
     }
 }

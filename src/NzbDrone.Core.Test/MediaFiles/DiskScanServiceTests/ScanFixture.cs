@@ -158,7 +158,7 @@ namespace NzbDrone.Core.Test.MediaFiles.DiskScanServiceTests
             Subject.Scan(_movie);
 
             Mocker.GetMock<IDiskProvider>()
-                  .Verify(v => v.GetFiles(It.IsAny<string>(), It.IsAny<bool>()), Times.Exactly(2));
+                  .Verify(v => v.GetFiles(It.IsAny<string>(), It.IsAny<bool>()), Times.Once());
 
             Mocker.GetMock<IMakeImportDecision>()
                   .Verify(v => v.GetImportDecisions(It.Is<List<string>>(l => l.Count == 1), _movie, false), Times.Once());
@@ -474,6 +474,52 @@ namespace NzbDrone.Core.Test.MediaFiles.DiskScanServiceTests
                         _movie,
                         false),
                     Times.Once());
+        }
+
+        [Test]
+        public void should_list_a_shared_folder_once_while_scanning_every_movie()
+        {
+            var shared = _rootFolder;
+            var first = new Movie { Id = 11, Title = "One", Path = shared };
+            var second = new Movie { Id = 12, Title = "Two", Path = shared };
+            var files = new[]
+            {
+                Path.Combine(shared, "One (2001).mkv").AsOsAgnostic(),
+                Path.Combine(shared, "Two (2002).mkv").AsOsAgnostic()
+            };
+
+            Mocker.GetMock<IDiskProvider>()
+                  .Setup(s => s.FolderExists(shared))
+                  .Returns(true);
+
+            Mocker.GetMock<IDiskProvider>()
+                  .Setup(s => s.GetFiles(shared, false))
+                  .Returns(files);
+
+            Mocker.GetMock<IMovieLayoutService>()
+                  .Setup(s => s.GetLayout(It.IsAny<Movie>()))
+                  .Returns(MovieFolderLayout.Flat);
+
+            Mocker.GetMock<IMovieLayoutService>()
+                  .Setup(s => s.SelectVideoFiles(It.IsAny<Movie>(), It.IsAny<List<string>>()))
+                  .Returns((Movie movie, List<string> found) => found.Take(1).ToList());
+
+            Mocker.GetMock<IMovieLayoutService>()
+                  .Setup(s => s.SelectExtraFiles(It.IsAny<Movie>(), It.IsAny<List<string>>(), It.IsAny<IEnumerable<string>>()))
+                  .Returns((Movie movie, List<string> extras, IEnumerable<string> videos) => extras);
+
+            Mocker.GetMock<IMediaFileService>()
+                  .Setup(s => s.GetFilesByMovie(It.IsAny<int>()))
+                  .Returns(new List<MovieFile>());
+
+            Subject.Scan(first);
+            Subject.Scan(second);
+
+            Mocker.GetMock<IDiskProvider>()
+                  .Verify(v => v.GetFiles(shared, false), Times.Once());
+
+            Mocker.GetMock<IDiskProvider>()
+                  .Verify(v => v.OpenReadStream(It.IsAny<string>()), Times.Never());
         }
     }
 }

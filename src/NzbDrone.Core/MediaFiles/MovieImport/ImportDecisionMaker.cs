@@ -79,7 +79,7 @@ namespace NzbDrone.Core.MediaFiles.MovieImport
                 downloadClientItemInfo = Parser.Parser.ParseMovieTitle(downloadClientItem.Title);
             }
 
-            var nonSampleVideoFileCount = GetNonSampleVideoFileCount(newFiles, movie.MovieMetadata);
+            var nonSampleVideoFileCount = GetNonSampleVideoFileCount(newFiles, movie);
 
             var decisions = new List<ImportDecision>();
 
@@ -197,11 +197,18 @@ namespace NzbDrone.Core.MediaFiles.MovieImport
             return null;
         }
 
-        private int GetNonSampleVideoFileCount(List<string> videoFiles, MovieMetadata movie)
+        private int GetNonSampleVideoFileCount(List<string> videoFiles, Movie movie)
         {
             return videoFiles.Count(file =>
             {
-                var sample = _detectSample.IsSample(movie, file);
+                // A file that already lives in the movie folder is the library copy.
+                // Sample detection probes the file, which must not happen while assigning it.
+                if (movie?.Path.IsNotNullOrWhiteSpace() == true && movie.Path.IsParentPath(file))
+                {
+                    return true;
+                }
+
+                var sample = _detectSample.IsSample(movie?.MovieMetadata, file);
 
                 if (sample == DetectSampleResult.Sample)
                 {
