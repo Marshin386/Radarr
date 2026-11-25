@@ -58,7 +58,7 @@ namespace NzbDrone.Core.MediaFiles
 
             var existingFile = localMovie.Movie.MovieFileId > 0 ? localMovie.Movie.MovieFile : null;
             var oldMoviePath = localMovie.Movie.Path;
-            var newMoviePath = GetUpgradePath(localMovie.Movie, existingFile);
+            var newMoviePath = GetUpgradePath(localMovie.Movie);
 
             var rootFolder = _diskProvider.GetParentFolder(oldMoviePath);
 
@@ -111,7 +111,7 @@ namespace NzbDrone.Core.MediaFiles
 
             if (newMoviePath.IsNotNullOrWhiteSpace() && !newMoviePath.PathEquals(oldMoviePath))
             {
-                _logger.Info("Moving upgraded movie from '{0}' to '{1}'", oldMoviePath, newMoviePath);
+                _logger.Info("Moving movie from '{0}' to '{1}'", oldMoviePath, newMoviePath);
                 localMovie.Movie.Path = newMoviePath;
                 _movieService.UpdateMovie(localMovie.Movie);
                 RemoveEmptySourceFolders(localMovie.Movie, oldMoviePath);
@@ -131,12 +131,13 @@ namespace NzbDrone.Core.MediaFiles
             return moveFileResult;
         }
 
-        private string GetUpgradePath(Movie movie, MovieFile existingFile)
+        // The profile chooses the folder for every new download. A missing movie file
+        // (never imported, or deleted) uses the same destination as a replacement.
+        private string GetUpgradePath(Movie movie)
         {
             var profile = movie.QualityProfile;
 
-            if (existingFile == null ||
-                profile == null ||
+            if (profile == null ||
                 !profile.UpgradeAllowed ||
                 profile.UpgradeFilePlacement != UpgradeFilePlacement.MoveToDesignatedLocation ||
                 profile.UpgradeDestination.IsNullOrWhiteSpace())

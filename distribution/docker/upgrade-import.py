@@ -170,10 +170,40 @@ def main():
             raise SystemExit("old sidecar stayed at %s" % sidecar_path)
         print("moved upgrade for", layout, "to", actual)
 
+    def import_after_file_deleted(layout, expected_path):
+        set_layout(layout)
+        set_profile(call("GET", "/api/v3/qualityprofile/%s" % profile["id"]), "moveToDesignatedLocation", DEST)
+        movie_now = call("GET", "/api/v3/movie/%s" % movie_id)
+        if movie_now["path"].rstrip("/") != original:
+            movie_now["path"] = original
+            call("PUT", "/api/v3/movie/%s?moveFiles=false" % movie_id, movie_now)
+            movie_now = call("GET", "/api/v3/movie/%s" % movie_id)
+        file_id = (movie_now.get("movieFile") or {}).get("id")
+        if file_id:
+            call("DELETE", "/api/v3/moviefile/%s" % file_id)
+        movie_now = call("GET", "/api/v3/movie/%s" % movie_id)
+        if movie_now.get("movieFile"):
+            raise SystemExit("deleting the movie file left a file on %s" % movie_now["path"])
+        if movie_now["path"].rstrip("/") != original:
+            raise SystemExit("deleting the file changed the path to %s" % movie_now["path"])
+        source = "/config/downloads/The.Matrix.1999.fresh.%s.mkv" % layout
+        write_file(source)
+        quality_id = 6 if layout == "flat" else 9
+        import_file(movie_id, source, quality_id)
+        moved = call("GET", "/api/v3/movie/%s" % movie_id)
+        actual = moved["path"].rstrip("/")
+        if actual != expected_path:
+            raise SystemExit("%s import after delete path %s != %s" % (layout, actual, expected_path))
+        if not exists("%s/%s" % (actual, os.path.basename(source))):
+            raise SystemExit("new download after delete missing from %s" % actual)
+        print("fresh import after delete for", layout, "landed in", actual)
+
     docker("mkdir -p %s && chown radarr:radarr %s" % (DEST, DEST))
     move_upgrade("flat", DEST)
     call("PUT", "/api/v3/movie/%s?moveFiles=false" % movie_id, {**call("GET", "/api/v3/movie/%s" % movie_id), "path": original})
     move_upgrade("movieFolder", "%s/%s" % (DEST, folder_name))
+    import_after_file_deleted("flat", DEST)
+    import_after_file_deleted("movieFolder", "%s/%s" % (DEST, folder_name))
     print("upgrade import check passed")
 
 

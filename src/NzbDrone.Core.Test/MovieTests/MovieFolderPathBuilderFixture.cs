@@ -153,5 +153,22 @@ namespace NzbDrone.Core.Test.MovieTests
 
             Subject.BuildLibraryPath(_movie, destination).Should().Be(Path.Combine(destination, "Heat (1995)"));
         }
+
+        [Test]
+        public void should_place_an_upgrade_in_a_custom_folder_under_the_designated_folder()
+        {
+            var destination = @"C:\Upgrades".AsOsAgnostic();
+            var customFolder = Path.Combine("Collections", "Heat (1995)");
+
+            Mocker.GetMock<INamingConfigService>()
+                .Setup(service => service.GetConfig())
+                .Returns(new NamingConfig { FolderLayout = MovieFolderLayout.Custom });
+
+            Mocker.GetMock<IBuildFileNames>()
+                .Setup(builder => builder.GetCustomMovieFolder(_movie, null))
+                .Returns(customFolder);
+
+            Subject.BuildLibraryPath(_movie, destination).Should().Be(Path.Combine(destination, customFolder));
+        }
     }
 }

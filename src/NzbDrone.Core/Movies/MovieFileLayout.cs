@@ -1,8 +1,11 @@
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text.RegularExpressions;
+using NzbDrone.Common;
+using NzbDrone.Common.EnvironmentInfo;
 using NzbDrone.Common.Extensions;
 using NzbDrone.Core.Parser;
 using NzbDrone.Core.Parser.Model;
@@ -17,6 +20,20 @@ namespace NzbDrone.Core.Movies
     public static class MovieFileLayout
     {
         private static readonly Regex YearFirstRegex = new Regex(@"^\(?((?:19|20)\d{2})\)?[ .\-_]+(?<title>.+)$", RegexOptions.Compiled);
+        private static readonly ConcurrentDictionary<string, ParsedNames> ParsedFileCache = new ConcurrentDictionary<string, ParsedNames>(PathEqualityComparer.Instance);
+
+        private sealed class ParsedNames
+        {
+            public ParsedNames(ParsedMovieInfo primary, ParsedMovieInfo yearFirst)
+            {
+                Primary = primary;
+                YearFirst = yearFirst;
+            }
+
+            public ParsedMovieInfo Primary { get; }
+            public ParsedMovieInfo YearFirst { get; }
+        }
+
         public static bool ExtraFileMatchesMovieStem(string filePath, string movieStem)
         {
             var name = Path.GetFileNameWithoutExtension(filePath);
@@ -61,23 +78,127 @@ namespace NzbDrone.Core.Movies
 
         public static bool FileMatchesMovie(Movie movie, string filePath)
         {
-            if (ParsedTitleMatches(movie, Parser.Parser.ParseMoviePath(filePath)))
+            var parsed = ParseCached(filePath);
+
+            if (ParsedTitleMatches(movie, parsed.Primary))
             {
                 return true;
             }
 
-            var fileName = Path.GetFileNameWithoutExtension(filePath);
+            return ParsedTitleMatches(movie, parsed.YearFirst);
+        }
 
-            if (!TryParseYearFirst(fileName, out var title, out var year))
+        /// <summary>
+        /// A flat movie file is the name in the shared directory. Path prefix differences
+        /// (a trailing slash, a symlink spelling) must not look like a different file.
+        /// </summary>
+        public static bool SameLibraryFile(string moviePath, string relativePath, string diskPath)
+        {
+            if (moviePath.IsNullOrWhiteSpace() || relativePath.IsNullOrWhiteSpace() || diskPath.IsNullOrWhiteSpace())
             {
                 return false;
             }
 
-            return ParsedTitleMatches(movie, new ParsedMovieInfo
+            if (PathsEqual(Path.Combine(moviePath, relativePath), diskPath))
             {
-                MovieTitles = new List<string> { title },
-                Year = year
-            });
+                return true;
+            }
+
+            if (relativePath.Contains('/') || relativePath.Contains('\\'))
+            {
+                return false;
+            }
+
+            var directory = Path.GetDirectoryName(diskPath);
+
+            return directory.IsNotNullOrWhiteSpace() &&
+                   PathsEqual(directory, moviePath) &&
+                   FileNamesEqual(Path.GetFileName(diskPath), relativePath);
+        }
+
+        private static bool PathsEqual(string left, string right)
+        {
+            try
+            {
+                return left.PathEquals(right);
+            }
+            catch (ArgumentException)
+            {
+                return false;
+            }
+        }
+
+        private static bool FileNamesEqual(string left, string right)
+        {
+            var comparison = OsInfo.IsWindows ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
+
+            return string.Equals(left, right, comparison);
+        }
+
+        public static bool IsPresent(string moviePath, string relativePath, ISet<string> filesOnDisk)
+        {
+            if (filesOnDisk == null || filesOnDisk.Count == 0)
+            {
+                return false;
+            }
+
+            if (moviePath.IsNullOrWhiteSpace() || relativePath.IsNullOrWhiteSpace())
+            {
+                return false;
+            }
+
+            if (filesOnDisk.Contains(Path.Combine(moviePath, relativePath)))
+            {
+                return true;
+            }
+
+            return filesOnDisk.Any(file => SameLibraryFile(moviePath, relativePath, file));
+        }
+
+        private static ParsedNames ParseCached(string filePath)
+        {
+            if (filePath.IsNullOrWhiteSpace())
+            {
+                return new ParsedNames(null, null);
+            }
+
+            if (ParsedFileCache.Count > 20000)
+            {
+                ParsedFileCache.Clear();
+            }
+
+            return ParsedFileCache.GetOrAdd(filePath, ParseNames);
+        }
+
+        private static ParsedNames ParseNames(string filePath)
+        {
+            var fileName = Path.GetFileName(filePath);
+            var primary = Parser.Parser.ParseMovieTitle(fileName, true);
+
+            if (primary == null)
+            {
+                var directory = Path.GetFileName(Path.GetDirectoryName(filePath) ?? string.Empty);
+
+                if (directory.IsNotNullOrWhiteSpace())
+                {
+                    primary = Parser.Parser.ParseMovieTitle(directory + " " + fileName) ??
+                              Parser.Parser.ParseMovieTitle(directory + Path.GetExtension(fileName));
+                }
+            }
+
+            ParsedMovieInfo yearFirst = null;
+            var stem = Path.GetFileNameWithoutExtension(filePath);
+
+            if (TryParseYearFirst(stem, out var title, out var year))
+            {
+                yearFirst = new ParsedMovieInfo
+                {
+                    MovieTitles = new List<string> { title },
+                    Year = year
+                };
+            }
+
+            return new ParsedNames(primary, yearFirst);
         }
 
         private static bool TryParseYearFirst(string fileName, out string title, out int year)

@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using FizzWare.NBuilder;
 using FluentAssertions;
@@ -210,6 +211,20 @@ namespace NzbDrone.Core.Test.MediaFiles.MovieImport
             Mocker.GetMock<IAggregationService>()
                   .Setup(c => c.Augment(It.IsAny<LocalMovie>(), It.IsAny<DownloadClientItem>()))
                   .Throws<TestException>();
+        }
+
+        [Test]
+        public void should_not_probe_a_file_that_already_lives_in_the_movie_folder()
+        {
+            var libraryFile = Path.Combine(_movie.Path, "The Movie (2018).mkv").AsOsAgnostic();
+            GivenVideoFiles(new List<string> { libraryFile });
+            GivenAugmentationSuccess();
+            GivenSpecifications(_pass1);
+
+            Subject.GetImportDecisions(new List<string> { libraryFile }, _movie, false);
+
+            Mocker.GetMock<IDetectSample>()
+                  .Verify(sample => sample.IsSample(It.IsAny<MovieMetadata>(), It.IsAny<string>()), Times.Never());
         }
 
         [Test]

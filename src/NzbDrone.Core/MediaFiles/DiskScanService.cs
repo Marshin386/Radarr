@@ -45,6 +45,11 @@ namespace NzbDrone.Core.MediaFiles
         private readonly IUpdateMediaInfo _updateMediaInfoService;
         private readonly IEventAggregator _eventAggregator;
         private readonly Logger _logger;
+        private readonly object _listingGate = new object();
+        private string _listingPath;
+        private bool _listingRecursive;
+        private string[] _listing = Array.Empty<string>();
+        private DateTime _listingUtc;
 
         public DiskScanService(IDiskProvider diskProvider,
                                IMakeImportDecision importDecisionMaker,
@@ -130,7 +135,8 @@ namespace NzbDrone.Core.MediaFiles
             var videoFilesStopwatch = Stopwatch.StartNew();
             var layout = _movieLayoutService.GetLayout(movie);
             var searchSubfolders = layout == MovieFolderLayout.MovieFolder;
-            var mediaFileList = FilterPaths(movie.Path, GetVideoFiles(movie.Path, searchSubfolders)).ToList();
+            var filesInFolder = ListFolderOnce(movie.Path, searchSubfolders);
+            var mediaFileList = FilterPaths(movie.Path, filesInFolder.Where(file => MediaFileExtensions.Extensions.Contains(Path.GetExtension(file)))).ToList();
 
             if (layout != MovieFolderLayout.MovieFolder)
             {
@@ -182,8 +188,7 @@ namespace NzbDrone.Core.MediaFiles
             fileInfoStopwatch.Stop();
             _logger.Trace("Reprocessing existing files complete for: {0} [{1}]", movie, decisionsStopwatch.Elapsed);
 
-            var filesOnDisk = GetNonVideoFiles(movie.Path, searchSubfolders);
-            var possibleExtraFiles = FilterPaths(movie.Path, filesOnDisk);
+            var possibleExtraFiles = FilterPaths(movie.Path, filesInFolder.Where(file => !MediaFileExtensions.Extensions.Contains(Path.GetExtension(file))));
 
             if (layout != MovieFolderLayout.MovieFolder)
             {
@@ -227,6 +232,34 @@ namespace NzbDrone.Core.MediaFiles
         {
             _logger.Info("Completed scanning disk for {0}", movie.Title);
             _eventAggregator.PublishEvent(new MovieScannedEvent(movie, possibleExtraFiles));
+        }
+
+        private string[] ListFolderOnce(string path, bool allDirectories)
+        {
+            lock (_listingGate)
+            {
+                if (_listingPath.IsNotNullOrWhiteSpace() &&
+                    _listingPath.PathEquals(path) &&
+                    _listingRecursive == allDirectories &&
+                    DateTime.UtcNow - _listingUtc < TimeSpan.FromMinutes(2))
+                {
+                    _logger.Trace("Reusing the directory listing for {0}", path);
+                    return _listing;
+                }
+            }
+
+            _logger.Debug("Scanning '{0}' for movie files", path);
+            var files = _diskProvider.GetFiles(path, allDirectories)?.ToArray() ?? Array.Empty<string>();
+
+            lock (_listingGate)
+            {
+                _listingPath = path;
+                _listingRecursive = allDirectories;
+                _listing = files;
+                _listingUtc = DateTime.UtcNow;
+            }
+
+            return files;
         }
 
         public string[] GetVideoFiles(string path, bool allDirectories = true)

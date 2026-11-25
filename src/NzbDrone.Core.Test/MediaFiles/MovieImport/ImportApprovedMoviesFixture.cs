@@ -148,6 +148,33 @@ namespace NzbDrone.Core.Test.MediaFiles.MovieImport
         }
 
         [Test]
+        public void should_not_assign_a_file_that_is_already_the_same_size()
+        {
+            var decision = _approvedDecisions.First();
+            var relativePath = decision.LocalMovie.Movie.Path.GetRelativePath(decision.LocalMovie.Path);
+            decision.LocalMovie.Size = 1234;
+
+            Mocker.GetMock<IMediaFileService>()
+                  .Setup(s => s.GetFilesWithRelativePath(decision.LocalMovie.Movie.Id, relativePath))
+                  .Returns(new List<MovieFile>
+                  {
+                      new MovieFile { RelativePath = relativePath, Size = 1234 }
+                  });
+
+            Mocker.GetMock<IDiskProvider>()
+                  .Setup(s => s.GetFileSize(decision.LocalMovie.Path))
+                  .Returns(1234);
+
+            Subject.Import(new List<ImportDecision> { decision }, false);
+
+            Mocker.GetMock<IMediaFileService>()
+                  .Verify(v => v.Add(It.IsAny<MovieFile>()), Times.Never());
+
+            Mocker.GetMock<IMediaFileService>()
+                  .Verify(v => v.Delete(It.IsAny<MovieFile>(), It.IsAny<DeleteMediaFileReason>()), Times.Never());
+        }
+
+        [Test]
         public void should_not_move_existing_files()
         {
             GivenExistingFileOnDisk();

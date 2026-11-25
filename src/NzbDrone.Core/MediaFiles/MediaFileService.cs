@@ -1,7 +1,6 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using NzbDrone.Common;
 using NzbDrone.Common.Extensions;
 using NzbDrone.Core.MediaFiles.Events;
 using NzbDrone.Core.Messaging.Events;
@@ -97,14 +96,7 @@ namespace NzbDrone.Core.MediaFiles
 
         public List<string> FilterExistingFiles(List<string> files, Movie movie)
         {
-            var movieFiles = GetFilesByMovie(movie.Id).Select(f => Path.Combine(movie.Path, f.RelativePath)).ToList();
-
-            if (!movieFiles.Any())
-            {
-                return files;
-            }
-
-            return files.Except(movieFiles, PathEqualityComparer.Instance).ToList();
+            return FilterExistingFiles(files, GetFilesByMovie(movie.Id), movie);
         }
 
         public List<MovieFile> GetMovies(IEnumerable<int> ids)
@@ -129,14 +121,12 @@ namespace NzbDrone.Core.MediaFiles
 
         public static List<string> FilterExistingFiles(List<string> files, List<MovieFile> movieFiles, Movie movie)
         {
-            var seriesFilePaths = movieFiles.Select(f => Path.Combine(movie.Path, f.RelativePath)).ToList();
-
-            if (!seriesFilePaths.Any())
+            if (files == null || movieFiles == null || movieFiles.Count == 0)
             {
-                return files;
+                return files ?? new List<string>();
             }
 
-            return files.Except(seriesFilePaths, PathEqualityComparer.Instance).ToList();
+            return files.Where(file => !movieFiles.Any(movieFile => MovieFileLayout.SameLibraryFile(movie.Path, movieFile.RelativePath, file))).ToList();
         }
     }
 }

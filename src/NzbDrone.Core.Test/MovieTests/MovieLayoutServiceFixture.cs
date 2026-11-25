@@ -81,6 +81,26 @@ namespace NzbDrone.Core.Test.MovieTests
         }
 
         [Test]
+        public void should_load_the_shared_folder_movies_once()
+        {
+            var nocturnalFile = Path.Combine(_root, "Nocturnal Animals (2016).mkv");
+            var heatFile = Path.Combine(_root, "Heat (1995).mkv");
+            var files = new List<string> { nocturnalFile, heatFile };
+
+            Subject.SelectVideoFiles(_nocturnal, files);
+            Subject.SelectVideoFiles(_heat, files);
+
+            Mocker.GetMock<IMovieRepository>()
+                .Verify(repository => repository.AllMoviePaths(), Times.Once());
+
+            Mocker.GetMock<IDiskProvider>()
+                .Verify(disk => disk.OpenReadStream(It.IsAny<string>()), Times.Never());
+
+            Mocker.GetMock<IDiskProvider>()
+                .Verify(disk => disk.GetFiles(It.IsAny<string>(), It.IsAny<bool>()), Times.Never());
+        }
+
+        [Test]
         public void should_not_select_a_kept_original_in_a_shared_folder()
         {
             var nocturnalFile = Path.Combine(_root, "Nocturnal Animals (2016).mkv");

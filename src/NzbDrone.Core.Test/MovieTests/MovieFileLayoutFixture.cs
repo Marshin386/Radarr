@@ -3,6 +3,7 @@ using FluentAssertions;
 using NUnit.Framework;
 using NzbDrone.Core.Movies;
 using NzbDrone.Core.Test.Framework;
+using NzbDrone.Test.Common;
 
 namespace NzbDrone.Core.Test.MovieTests
 {
@@ -60,6 +61,17 @@ namespace NzbDrone.Core.Test.MovieTests
 
             MovieFileLayout.FileMatchesMovie(movie, "/Theatre/Movie Series/Marvel Movies/(2010) Iron Man 2.mkv")
                 .Should().BeFalse();
+        }
+
+        [Test]
+        public void should_treat_the_same_flat_file_name_as_one_file()
+        {
+            var folder = @"C:\library\movies".AsOsAgnostic();
+            var onDisk = Path.Combine(folder, "Example (2020).mp4");
+
+            MovieFileLayout.SameLibraryFile(folder, "Example (2020).mp4", onDisk).Should().BeTrue();
+            MovieFileLayout.SameLibraryFile(folder, Path.Combine("other", "Example (2020).mp4"), onDisk).Should().BeFalse();
+            MovieFileLayout.SameLibraryFile(folder, "Other (2020).mp4", onDisk).Should().BeFalse();
         }
     }
 }

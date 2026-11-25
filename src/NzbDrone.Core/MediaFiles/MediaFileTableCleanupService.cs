@@ -39,7 +39,7 @@ namespace NzbDrone.Core.MediaFiles
 
                 try
                 {
-                    if (!filesOnDiskKeys.Contains(movieFilePath))
+                    if (!MovieFileLayout.IsPresent(movie.Path, movieFile.RelativePath, filesOnDiskKeys))
                     {
                         _logger.Debug("File [{0}] no longer exists on disk, removing from db", movieFilePath);
                         _mediaFileService.Delete(movieFile, DeleteMediaFileReason.MissingFromDisk);

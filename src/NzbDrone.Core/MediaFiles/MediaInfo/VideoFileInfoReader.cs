@@ -1,8 +1,12 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Text.Json;
 using System.Text.Json.Nodes;
+using System.Text.Json.Serialization;
+using System.Threading.Tasks;
 using FFMpegCore;
 using NLog;
 using NzbDrone.Common.Disk;
@@ -20,6 +24,25 @@ namespace NzbDrone.Core.MediaFiles.MediaInfo
     {
         private readonly IDiskProvider _diskProvider;
         private readonly Logger _logger;
+        private readonly Dictionary<string, CachedProbe> _probeCache = new Dictionary<string, CachedProbe>();
+
+        private sealed class CachedProbe
+        {
+            public long Size { get; set; }
+            public DateTime WriteTime { get; set; }
+            public MediaInfoModel Model { get; set; }
+        }
+
+        private sealed class FrameDump
+        {
+            public List<FrameItem> Frames { get; set; }
+        }
+
+        private sealed class FrameItem
+        {
+            [JsonPropertyName("side_data_list")]
+            public List<Dictionary<string, JsonNode>> SideDataList { get; set; }
+        }
 
         public const int MINIMUM_MEDIA_INFO_SCHEMA_REVISION = 16;
         public const int CURRENT_MEDIA_INFO_SCHEMA_REVISION = 16;
@@ -52,18 +75,17 @@ namespace NzbDrone.Core.MediaFiles.MediaInfo
                 return null;
             }
 
-            // TODO: Cache media info by path, mtime and length so we don't need to read files multiple times
+            if (TryGetCached(filename, out var cached))
+            {
+                return cached;
+            }
+
             try
             {
                 _logger.Debug("Getting media info from {0}", filename);
 
-                var analysis = FFProbe.Analyse(filename, customArguments: "-probesize 50000000");
+                var analysis = FFProbe.FromJson(RunFfprobe(MediaProbeArguments.Format(filename)));
                 var primaryVideoStream = GetPrimaryVideoStream(analysis);
-
-                if (analysis.PrimaryAudioStream?.ChannelLayout.IsNullOrWhiteSpace() ?? true)
-                {
-                    analysis = FFProbe.Analyse(filename, customArguments: "-probesize 150000000 -analyzeduration 150000000");
-                }
 
                 var mediaInfoModel = new MediaInfoModel();
                 mediaInfoModel.ContainerFormat = analysis.Format.FormatName;
@@ -155,21 +177,22 @@ namespace NzbDrone.Core.MediaFiles.MediaInfo
                     mediaInfoModel.Title = title;
                 }
 
-                FFProbeFrames frames = null;
+                IReadOnlyList<IReadOnlyDictionary<string, JsonNode>> framesSideData = new List<IReadOnlyDictionary<string, JsonNode>>();
 
-                // if it looks like PQ10 or similar HDR, do a frame analysis to figure out which type it is
+                // One frame is enough to tell HDR10 from HDR10+. The interval has to be an input
+                // option, or ffprobe describes every frame and reads the whole movie.
                 if (PqTransferFunctions.Contains(mediaInfoModel.VideoTransferCharacteristics))
                 {
                     var videoStreamIndex = analysis.VideoStreams.ToList().FindIndex(stream => stream.Index == primaryVideoStream?.Index);
-                    frames = FFProbe.GetFrames(filename, customArguments: $"-read_intervals \"%+#1\" -select_streams v:{(videoStreamIndex == -1 ? 0 : videoStreamIndex)}");
+                    framesSideData = ReadFirstFrameSideData(filename, videoStreamIndex);
                 }
 
                 var streamSideData = primaryVideoStream?.SideData ?? new List<IReadOnlyDictionary<string, JsonNode>>().AsReadOnly();
-                var framesSideData = frames?.Frames.ToList().FirstOrDefault()?.SideData ?? new List<IReadOnlyDictionary<string, JsonNode>>().AsReadOnly();
 
                 var sideData = streamSideData.Concat(framesSideData).ToList();
                 mediaInfoModel.VideoHdrFormat = GetHdrFormat(mediaInfoModel.VideoBitDepth, mediaInfoModel.VideoColourPrimaries, mediaInfoModel.VideoTransferCharacteristics, sideData);
 
+                StoreCache(filename, mediaInfoModel);
                 return mediaInfoModel;
             }
             catch (Exception ex)
@@ -185,6 +208,139 @@ namespace NzbDrone.Core.MediaFiles.MediaInfo
             var info = GetMediaInfo(filename);
 
             return info?.RunTime;
+        }
+
+        private bool TryGetCached(string filename, out MediaInfoModel model)
+        {
+            model = null;
+
+            if (!TryGetCacheKey(filename, out var size, out var writeTime))
+            {
+                return false;
+            }
+
+            lock (_probeCache)
+            {
+                if (_probeCache.TryGetValue(filename, out var cached) &&
+                    cached.Size == size &&
+                    cached.WriteTime == writeTime)
+                {
+                    model = cached.Model;
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        private void StoreCache(string filename, MediaInfoModel model)
+        {
+            if (!TryGetCacheKey(filename, out var size, out var writeTime))
+            {
+                return;
+            }
+
+            lock (_probeCache)
+            {
+                if (_probeCache.Count > 128)
+                {
+                    _probeCache.Clear();
+                }
+
+                _probeCache[filename] = new CachedProbe
+                {
+                    Size = size,
+                    WriteTime = writeTime,
+                    Model = model
+                };
+            }
+        }
+
+        private bool TryGetCacheKey(string filename, out long size, out DateTime writeTime)
+        {
+            size = 0;
+            writeTime = DateTime.MinValue;
+
+            try
+            {
+                size = _diskProvider.GetFileSize(filename);
+                writeTime = _diskProvider.FileGetLastWrite(filename);
+                return true;
+            }
+            catch (Exception)
+            {
+                return false;
+            }
+        }
+
+        private IReadOnlyList<IReadOnlyDictionary<string, JsonNode>> ReadFirstFrameSideData(string filename, int videoStreamIndex)
+        {
+            try
+            {
+                var json = RunFfprobe(MediaProbeArguments.OneFrame(filename, videoStreamIndex));
+                var dump = JsonSerializer.Deserialize<FrameDump>(json, new JsonSerializerOptions
+                {
+                    PropertyNameCaseInsensitive = true
+                });
+                var sideData = dump?.Frames?.FirstOrDefault()?.SideDataList;
+
+                if (sideData == null)
+                {
+                    return new List<IReadOnlyDictionary<string, JsonNode>>();
+                }
+
+                return sideData.Cast<IReadOnlyDictionary<string, JsonNode>>().ToList();
+            }
+            catch (Exception ex)
+            {
+                _logger.Debug(ex, "Unable to read a single frame of side data from {0}", filename);
+                return new List<IReadOnlyDictionary<string, JsonNode>>();
+            }
+        }
+
+        private static string RunFfprobe(IReadOnlyList<string> arguments)
+        {
+            var startInfo = new ProcessStartInfo(GlobalFFOptions.GetFFProbeBinaryPath())
+            {
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false,
+                CreateNoWindow = true
+            };
+
+            foreach (var argument in arguments)
+            {
+                startInfo.ArgumentList.Add(argument);
+            }
+
+            using var process = new Process { StartInfo = startInfo };
+            process.Start();
+
+            var stdout = process.StandardOutput.ReadToEndAsync();
+            var stderr = process.StandardError.ReadToEndAsync();
+
+            if (!process.WaitForExit(60_000))
+            {
+                try
+                {
+                    process.Kill(entireProcessTree: true);
+                }
+                catch (Exception)
+                {
+                    // The probe is already being torn down.
+                }
+
+                throw new TimeoutException("ffprobe did not finish within 60 seconds");
+            }
+
+            Task.WaitAll(stdout, stderr);
+
+            if (process.ExitCode != 0)
+            {
+                throw new InvalidOperationException(stderr.Result);
+            }
+
+            return stdout.Result;
         }
 
         private static TimeSpan GetBestRuntime(TimeSpan? audio, TimeSpan? video, TimeSpan general)
