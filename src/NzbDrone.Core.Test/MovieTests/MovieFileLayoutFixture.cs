@@ -1,7 +1,11 @@
+using System.Collections.Generic;
 using System.IO;
 using FluentAssertions;
 using NUnit.Framework;
+using NzbDrone.Common;
 using NzbDrone.Core.Movies;
+using NzbDrone.Core.Movies.AlternativeTitles;
+using NzbDrone.Core.Parser.Model;
 using NzbDrone.Core.Test.Framework;
 using NzbDrone.Test.Common;
 
@@ -72,6 +76,45 @@ namespace NzbDrone.Core.Test.MovieTests
             MovieFileLayout.SameLibraryFile(folder, "Example (2020).mp4", onDisk).Should().BeTrue();
             MovieFileLayout.SameLibraryFile(folder, Path.Combine("other", "Example (2020).mp4"), onDisk).Should().BeFalse();
             MovieFileLayout.SameLibraryFile(folder, "Other (2020).mp4", onDisk).Should().BeFalse();
+        }
+
+        [Test]
+        public void should_match_an_alternative_title_and_still_reject_a_different_year()
+        {
+            var movie = new Movie
+            {
+                Title = "Heat",
+                Year = 1995
+            };
+
+            movie.MovieMetadata.Value.AlternativeTitles = new List<AlternativeTitle>
+            {
+                new AlternativeTitle("L.A. Takedown")
+            };
+
+            var parsed = new ParsedMovieInfo
+            {
+                MovieTitles = new List<string> { "L.A. Takedown" },
+                Year = 1995
+            };
+
+            MovieFileLayout.ParsedTitleMatches(movie, parsed).Should().BeTrue();
+            MovieFileLayout.ParsedTitleMatches(movie, parsed).Should().BeTrue();
+
+            parsed.Year = 1994;
+            MovieFileLayout.ParsedTitleMatches(movie, parsed).Should().BeFalse();
+        }
+
+        [Test]
+        public void should_find_a_flat_file_from_the_path_set_without_a_nested_false_match()
+        {
+            var folder = @"C:\library\movies".AsOsAgnostic();
+            var onDisk = Path.Combine(folder, "Example (2020).mp4");
+            var files = new HashSet<string>(PathEqualityComparer.Instance) { onDisk };
+
+            MovieFileLayout.IsPresent(folder, "Example (2020).mp4", files).Should().BeTrue();
+            MovieFileLayout.IsPresent(folder, Path.Combine("other", "Example (2020).mp4"), files).Should().BeFalse();
+            MovieFileLayout.IsPresent(folder, "Missing (2020).mp4", files).Should().BeFalse();
         }
     }
 }

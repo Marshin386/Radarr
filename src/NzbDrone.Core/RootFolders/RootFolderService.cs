@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 using NLog;
 using NzbDrone.Common;
@@ -30,6 +31,8 @@ namespace NzbDrone.Core.RootFolders
 
     public class RootFolderService : IRootFolderService
     {
+        private static readonly TimeSpan UnmappedCacheLifetime = TimeSpan.FromSeconds(15);
+
         private readonly IRootFolderRepository _rootFolderRepository;
         private readonly IDiskProvider _diskProvider;
         private readonly IMovieRepository _movieRepository;
@@ -40,6 +43,8 @@ namespace NzbDrone.Core.RootFolders
         private readonly Logger _logger;
 
         private readonly ICached<string> _cache;
+        private readonly object _scanGate = new object();
+        private readonly Dictionary<string, InFlightScan> _scans = new Dictionary<string, InFlightScan>(PathEqualityComparer.Instance);
 
         private static readonly HashSet<string> SpecialFolders = new HashSet<string>
                                                                  {
@@ -141,7 +146,7 @@ namespace NzbDrone.Core.RootFolders
             var moviePaths = _movieRepository.AllMoviePaths();
 
             GetDetails(rootFolder, moviePaths, true);
-            _cache.Clear();
+            ClearCaches();
 
             return rootFolder;
         }
@@ -152,7 +157,7 @@ namespace NzbDrone.Core.RootFolders
 
             existing.FolderLayout = rootFolder.FolderLayout;
             _rootFolderRepository.SetFields(existing, folder => folder.FolderLayout);
-            _cache.Clear();
+            ClearCaches();
 
             return existing;
         }
@@ -170,18 +175,19 @@ namespace NzbDrone.Core.RootFolders
                 _rootFolderRepository.SetFields(root, folder => folder.FolderLayout);
             }
 
-            _cache.Clear();
+            ClearCaches();
         }
 
         public void Remove(int id)
         {
             _rootFolderRepository.Delete(id);
-            _cache.Clear();
+            ClearCaches();
         }
 
-        private List<UnmappedFolder> GetUnmappedFolders(string path, Dictionary<int, string> moviePaths)
+        private List<UnmappedFolder> GetUnmappedFolders(string path, Dictionary<int, string> moviePaths, CancellationToken cancellationToken)
         {
             _logger.Debug("Generating list of unmapped folders");
+            cancellationToken.ThrowIfCancellationRequested();
 
             if (string.IsNullOrEmpty(path))
             {
@@ -196,23 +202,25 @@ namespace NzbDrone.Core.RootFolders
                 return results;
             }
 
+            var context = CreateLayoutContext(path, moviePaths);
             var keptPaths = KeptFilePaths();
             var keptDirectories = new HashSet<string>(
                 keptPaths.Select(filePath => Path.GetDirectoryName(filePath)).Where(directory => directory.IsNotNullOrWhiteSpace()),
                 PathEqualityComparer.Instance);
 
-            if (GetFolderLayout(path) != MovieFolderLayout.MovieFolder)
+            if (context.GetLayout(path) != MovieFolderLayout.MovieFolder)
             {
-                return GetUnmappedMovieFiles(path, moviePaths, keptPaths);
+                return GetUnmappedMovieFiles(path, moviePaths, keptPaths, context, cancellationToken);
             }
 
-            var subFolderDepth = _namingConfigService.GetConfig().MovieFolderFormat.Count(f => f == Path.DirectorySeparatorChar);
+            var subFolderDepth = context.NamingConfig.MovieFolderFormat.Count(f => f == Path.DirectorySeparatorChar);
             var possibleMovieFolders = _diskProvider.GetDirectories(path).ToList();
 
             if (subFolderDepth > 0)
             {
                 for (var i = 0; i < subFolderDepth; i++)
                 {
+                    cancellationToken.ThrowIfCancellationRequested();
                     possibleMovieFolders = possibleMovieFolders.SelectMany(_diskProvider.GetDirectories).ToList();
                 }
             }
@@ -223,6 +231,8 @@ namespace NzbDrone.Core.RootFolders
 
             foreach (var unmappedFolder in unmappedFolders)
             {
+                cancellationToken.ThrowIfCancellationRequested();
+
                 var di = new DirectoryInfo(unmappedFolder.Normalize());
 
                 if (keptDirectories.Contains(di.FullName))
@@ -273,10 +283,7 @@ namespace NzbDrone.Core.RootFolders
                 return MovieFolderLayout.MovieFolder;
             }
 
-            var match = All()
-                .Where(root => root.Path.IsNotNullOrWhiteSpace() && root.Path.IsPathValid(PathValidationType.CurrentOs))
-                .Where(root => root.Path.PathEquals(path) || root.Path.IsParentPath(path))
-                .MaxBy(root => root.Path.Length);
+            var match = FindMatchingRoot(path, All());
 
             if (match == null)
             {
@@ -289,16 +296,222 @@ namespace NzbDrone.Core.RootFolders
 
         private void GetDetails(RootFolder rootFolder, Dictionary<int, string> moviePaths, bool timeout)
         {
-            Task.Run(() =>
+            var wait = timeout ? TimeSpan.FromSeconds(5) : Timeout.InfiniteTimeSpan;
+            GetDetails(rootFolder, moviePaths, wait);
+        }
+
+        internal void GetDetails(RootFolder rootFolder, Dictionary<int, string> moviePaths, TimeSpan wait)
+        {
+            if (rootFolder == null || rootFolder.Path.IsNullOrWhiteSpace())
             {
-                if (_diskProvider.FolderExists(rootFolder.Path))
+                return;
+            }
+
+            var path = rootFolder.Path;
+            InFlightScan scan;
+            var useCache = false;
+
+            lock (_scanGate)
+            {
+                _scans.TryGetValue(path, out var existing);
+
+                if (existing != null && IsFresh(existing))
                 {
-                    rootFolder.Accessible = true;
-                    rootFolder.FreeSpace = _diskProvider.GetAvailableSpace(rootFolder.Path);
-                    rootFolder.TotalSpace = _diskProvider.GetTotalSize(rootFolder.Path);
-                    rootFolder.UnmappedFolders = GetUnmappedFolders(rootFolder.Path, moviePaths);
+                    scan = existing;
+                    useCache = true;
                 }
-            }).Wait(timeout ? 5000 : -1);
+                else if (existing?.Task != null && !existing.Task.IsCompleted && existing.Cancellation != null && !existing.Cancellation.IsCancellationRequested)
+                {
+                    existing.Waiters++;
+                    scan = existing;
+                }
+                else
+                {
+                    if (existing?.Task != null && !existing.Task.IsCompleted)
+                    {
+                        existing.Cancellation?.Cancel();
+                    }
+
+                    scan = new InFlightScan
+                    {
+                        Cancellation = new CancellationTokenSource(),
+                        Waiters = 1
+                    };
+
+                    var token = scan.Cancellation.Token;
+                    var paths = moviePaths;
+                    scan.Task = Task.Run(() => ExecuteScan(path, paths, scan, token));
+                    _scans[path] = scan;
+                }
+            }
+
+            if (useCache)
+            {
+                ApplyCached(rootFolder, scan);
+                return;
+            }
+
+            var waitMilliseconds = ToWaitMilliseconds(wait);
+            var completed = false;
+            var shouldCancel = false;
+
+            try
+            {
+                completed = scan.Task.Wait(waitMilliseconds);
+            }
+            catch (AggregateException exception) when (exception.InnerExceptions.All(inner => inner is OperationCanceledException))
+            {
+                completed = scan.Task.IsCompleted;
+            }
+            finally
+            {
+                lock (_scanGate)
+                {
+                    scan.Waiters--;
+
+                    if (scan.Succeeded)
+                    {
+                        ApplyScanResult(rootFolder, scan);
+                    }
+                    else if (!completed && scan.Waiters <= 0)
+                    {
+                        shouldCancel = true;
+                    }
+                }
+            }
+
+            if (shouldCancel)
+            {
+                scan.Cancellation.Cancel();
+            }
+        }
+
+        internal bool IsUnmappedScanCancellationRequested(string path)
+        {
+            lock (_scanGate)
+            {
+                return path.IsNotNullOrWhiteSpace() &&
+                       _scans.TryGetValue(path, out var scan) &&
+                       scan.Cancellation != null &&
+                       scan.Cancellation.IsCancellationRequested;
+            }
+        }
+
+        internal bool WaitForUnmappedScan(string path, TimeSpan timeout)
+        {
+            Task task;
+
+            lock (_scanGate)
+            {
+                if (path.IsNullOrWhiteSpace() || !_scans.TryGetValue(path, out var scan) || scan.Task == null)
+                {
+                    return true;
+                }
+
+                task = scan.Task;
+            }
+
+            try
+            {
+                return task.Wait(ToWaitMilliseconds(timeout));
+            }
+            catch (AggregateException)
+            {
+                return true;
+            }
+        }
+
+        private void ExecuteScan(string path, Dictionary<int, string> moviePaths, InFlightScan scan, CancellationToken token)
+        {
+            try
+            {
+                token.ThrowIfCancellationRequested();
+
+                if (!_diskProvider.FolderExists(path))
+                {
+                    return;
+                }
+
+                var freeSpace = _diskProvider.GetAvailableSpace(path);
+                var totalSpace = _diskProvider.GetTotalSize(path);
+                var unmapped = GetUnmappedFolders(path, moviePaths, token);
+
+                token.ThrowIfCancellationRequested();
+
+                lock (_scanGate)
+                {
+                    if (token.IsCancellationRequested)
+                    {
+                        return;
+                    }
+
+                    scan.Accessible = true;
+                    scan.FreeSpace = freeSpace;
+                    scan.TotalSpace = totalSpace;
+                    scan.UnmappedFolders = unmapped;
+                    scan.Succeeded = true;
+                    scan.CompletedUtc = DateTime.UtcNow;
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                _logger.Debug("Cancelled unmapped folder scan for {0}", path);
+            }
+        }
+
+        private void ApplyCached(RootFolder rootFolder, InFlightScan scan)
+        {
+            if (!_diskProvider.FolderExists(rootFolder.Path))
+            {
+                return;
+            }
+
+            rootFolder.Accessible = true;
+            rootFolder.FreeSpace = _diskProvider.GetAvailableSpace(rootFolder.Path);
+            rootFolder.TotalSpace = _diskProvider.GetTotalSize(rootFolder.Path);
+            rootFolder.UnmappedFolders = scan.UnmappedFolders?.ToList();
+        }
+
+        private static void ApplyScanResult(RootFolder rootFolder, InFlightScan scan)
+        {
+            rootFolder.Accessible = scan.Accessible;
+            rootFolder.FreeSpace = scan.FreeSpace;
+            rootFolder.TotalSpace = scan.TotalSpace;
+            rootFolder.UnmappedFolders = scan.UnmappedFolders?.ToList();
+        }
+
+        private static bool IsFresh(InFlightScan scan)
+        {
+            return scan.Succeeded && DateTime.UtcNow - scan.CompletedUtc < UnmappedCacheLifetime;
+        }
+
+        private static int ToWaitMilliseconds(TimeSpan wait)
+        {
+            if (wait == Timeout.InfiniteTimeSpan || wait < TimeSpan.Zero)
+            {
+                return Timeout.Infinite;
+            }
+
+            return (int)Math.Min(wait.TotalMilliseconds, int.MaxValue);
+        }
+
+        private void ClearCaches()
+        {
+            _cache.Clear();
+            ClearUnmappedScans();
+        }
+
+        private void ClearUnmappedScans()
+        {
+            lock (_scanGate)
+            {
+                foreach (var scan in _scans.Values)
+                {
+                    scan.Cancellation?.Cancel();
+                }
+
+                _scans.Clear();
+            }
         }
 
         private string GetBestRootFolderPathInternal(string path, List<RootFolder> rootFolders = null)
@@ -333,9 +546,37 @@ namespace NzbDrone.Core.RootFolders
                 PathEqualityComparer.Instance);
         }
 
-        private List<UnmappedFolder> GetUnmappedMovieFiles(string path, Dictionary<int, string> moviePaths, HashSet<string> keptPaths)
+        private FolderLayoutContext CreateLayoutContext(string path, Dictionary<int, string> moviePaths)
+        {
+            var context = new FolderLayoutContext(All(), _namingConfigService.GetConfig());
+
+            // Dedicated-folder discovery only runs while listing loose files. A movie-folder
+            // library lists directories instead, so there is nothing to classify.
+            if (context.GetLayout(path) == MovieFolderLayout.MovieFolder || moviePaths == null)
+            {
+                return context;
+            }
+
+            foreach (var moviePath in moviePaths.Values)
+            {
+                if (moviePath.IsNullOrWhiteSpace() || !moviePath.IsPathValid(PathValidationType.CurrentOs))
+                {
+                    continue;
+                }
+
+                if (context.GetLayout(moviePath) == MovieFolderLayout.MovieFolder)
+                {
+                    context.DedicatedMovieFolders.Add(moviePath);
+                }
+            }
+
+            return context;
+        }
+
+        private List<UnmappedFolder> GetUnmappedMovieFiles(string path, Dictionary<int, string> moviePaths, HashSet<string> keptPaths, FolderLayoutContext context, CancellationToken cancellationToken)
         {
             _logger.Debug("Generating list of unmapped movie files for {0}", path);
+            cancellationToken.ThrowIfCancellationRequested();
 
             var results = new List<UnmappedFolder>();
 
@@ -344,12 +585,18 @@ namespace NzbDrone.Core.RootFolders
                 return results;
             }
 
-            var layout = GetFolderLayout(path);
+            var layout = context.GetLayout(path);
+
+            // A flat root has no dedicated movie folders, so a movie path that merely contains
+            // the root does not hide files. Other layouts still match those paths by parent directory.
+            var checkDedicatedFolders = layout != MovieFolderLayout.Flat && context.DedicatedMovieFolders.Count > 0;
             var files = _diskProvider.GetFiles(path, layout == MovieFolderLayout.Custom) ?? Enumerable.Empty<string>();
-            var mappedSharedFiles = MappedSharedMovieFiles(moviePaths);
+            var mappedSharedFiles = MappedSharedMovieFiles(moviePaths, context);
 
             foreach (var file in files)
             {
+                cancellationToken.ThrowIfCancellationRequested();
+
                 if (!MediaFileExtensions.Extensions.Contains(Path.GetExtension(file)))
                 {
                     continue;
@@ -367,7 +614,7 @@ namespace NzbDrone.Core.RootFolders
                     continue;
                 }
 
-                if (mappedSharedFiles.Contains(file) || keptPaths.Contains(file) || IsInsideDedicatedMovieFolder(file, moviePaths))
+                if (mappedSharedFiles.Contains(file) || keptPaths.Contains(file) || (checkDedicatedFolders && IsInsideDedicatedMovieFolder(file, context)))
                 {
                     continue;
                 }
@@ -391,22 +638,22 @@ namespace NzbDrone.Core.RootFolders
             return results.OrderBy(item => item.RelativePath, StringComparer.InvariantCultureIgnoreCase).ToList();
         }
 
-        private HashSet<string> MappedSharedMovieFiles(Dictionary<int, string> moviePaths)
+        private HashSet<string> MappedSharedMovieFiles(Dictionary<int, string> moviePaths, FolderLayoutContext context)
         {
             var mapped = new HashSet<string>(PathEqualityComparer.Instance);
-            var sharedMovieIds = moviePaths
-                .Where(entry => entry.Value.IsNotNullOrWhiteSpace() && GetFolderLayout(entry.Value) != MovieFolderLayout.MovieFolder)
+            var sharedMovieIds = (moviePaths ?? new Dictionary<int, string>())
+                .Where(entry => entry.Value.IsNotNullOrWhiteSpace() && context.GetLayout(entry.Value) != MovieFolderLayout.MovieFolder)
                 .Select(entry => entry.Key)
                 .ToList();
 
-            if (!sharedMovieIds.Any())
+            if (sharedMovieIds.Count == 0)
             {
                 return mapped;
             }
 
-            foreach (var movieFile in _mediaFileService.GetFilesByMovies(sharedMovieIds) ?? new List<MovieFile>())
+            foreach (var movieFile in _mediaFileService.GetRelativePathsByMovies(sharedMovieIds) ?? new List<MovieFilePath>())
             {
-                if (!moviePaths.TryGetValue(movieFile.MovieId, out var moviePath) || movieFile.RelativePath.IsNullOrWhiteSpace())
+                if (movieFile == null || movieFile.RelativePath.IsNullOrWhiteSpace() || !moviePaths.TryGetValue(movieFile.MovieId, out var moviePath))
                 {
                     continue;
                 }
@@ -417,26 +664,96 @@ namespace NzbDrone.Core.RootFolders
             return mapped;
         }
 
-        private bool IsInsideDedicatedMovieFolder(string file, Dictionary<int, string> moviePaths)
+        private static bool IsInsideDedicatedMovieFolder(string file, FolderLayoutContext context)
         {
+            if (context.DedicatedMovieFolders.Count == 0)
+            {
+                return false;
+            }
+
             var directory = Path.GetDirectoryName(file);
 
-            foreach (var moviePath in moviePaths.Values)
+            while (directory.IsNotNullOrWhiteSpace())
             {
-                if (moviePath.IsNullOrWhiteSpace())
-                {
-                    continue;
-                }
-
-                var containsFile = moviePath.PathEquals(directory) || moviePath.IsParentPath(file);
-
-                if (containsFile && GetFolderLayout(moviePath) == MovieFolderLayout.MovieFolder)
+                if (context.DedicatedMovieFolders.Contains(directory))
                 {
                     return true;
                 }
+
+                var parent = Path.GetDirectoryName(directory);
+
+                if (parent.IsNullOrWhiteSpace() || parent.PathEquals(directory))
+                {
+                    break;
+                }
+
+                directory = parent;
             }
 
             return false;
+        }
+
+        private static RootFolder FindMatchingRoot(string path, IEnumerable<RootFolder> roots)
+        {
+            if (path.IsNullOrWhiteSpace() || !path.IsPathValid(PathValidationType.CurrentOs) || roots == null)
+            {
+                return null;
+            }
+
+            return roots
+                .Where(root => root.Path.IsNotNullOrWhiteSpace() && root.Path.IsPathValid(PathValidationType.CurrentOs))
+                .Where(root => root.Path.PathEquals(path) || root.Path.IsParentPath(path))
+                .MaxBy(root => root.Path.Length);
+        }
+
+        private sealed class InFlightScan
+        {
+            public Task Task { get; set; }
+            public CancellationTokenSource Cancellation { get; set; }
+            public int Waiters { get; set; }
+            public bool Succeeded { get; set; }
+            public bool Accessible { get; set; }
+            public long? FreeSpace { get; set; }
+            public long? TotalSpace { get; set; }
+            public List<UnmappedFolder> UnmappedFolders { get; set; }
+            public DateTime CompletedUtc { get; set; }
+        }
+
+        private sealed class FolderLayoutContext
+        {
+            private readonly List<RootFolder> _roots;
+            private readonly MovieFolderLayout _libraryLayout;
+            private readonly Dictionary<string, MovieFolderLayout> _layouts = new Dictionary<string, MovieFolderLayout>(PathEqualityComparer.Instance);
+
+            public FolderLayoutContext(IEnumerable<RootFolder> roots, NamingConfig namingConfig)
+            {
+                _roots = roots?.ToList() ?? new List<RootFolder>();
+                NamingConfig = namingConfig ?? NamingConfig.Default;
+                _libraryLayout = NamingConfig.FolderLayout;
+                DedicatedMovieFolders = new HashSet<string>(PathEqualityComparer.Instance);
+            }
+
+            public NamingConfig NamingConfig { get; }
+
+            public HashSet<string> DedicatedMovieFolders { get; }
+
+            public MovieFolderLayout GetLayout(string path)
+            {
+                if (path.IsNullOrWhiteSpace())
+                {
+                    return MovieFolderLayout.MovieFolder;
+                }
+
+                if (_layouts.TryGetValue(path, out var cached))
+                {
+                    return cached;
+                }
+
+                var match = FindMatchingRoot(path, _roots);
+                var layout = match == null ? MovieFolderLayout.MovieFolder : _libraryLayout;
+                _layouts[path] = layout;
+                return layout;
+            }
         }
     }
 }

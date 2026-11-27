@@ -1,6 +1,8 @@
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using NzbDrone.Common;
 using NzbDrone.Common.Extensions;
 using NzbDrone.Core.MediaFiles.Events;
 using NzbDrone.Core.Messaging.Events;
@@ -17,6 +19,7 @@ namespace NzbDrone.Core.MediaFiles
         void Delete(MovieFile movieFile, DeleteMediaFileReason reason);
         List<MovieFile> GetFilesByMovie(int movieId);
         List<MovieFile> GetFilesByMovies(IEnumerable<int> movieIds);
+        List<MovieFilePath> GetRelativePathsByMovies(IEnumerable<int> movieIds);
         List<MovieFile> GetFilesWithoutMediaInfo();
         List<string> FilterExistingFiles(List<string> files, Movie movie);
         MovieFile GetMovie(int id);
@@ -89,6 +92,11 @@ namespace NzbDrone.Core.MediaFiles
             return _mediaFileRepository.GetFilesByMovies(movieIds);
         }
 
+        public List<MovieFilePath> GetRelativePathsByMovies(IEnumerable<int> movieIds)
+        {
+            return _mediaFileRepository.GetRelativePathsByMovies(movieIds);
+        }
+
         public List<MovieFile> GetFilesWithoutMediaInfo()
         {
             return _mediaFileRepository.GetFilesWithoutMediaInfo();
@@ -126,7 +134,47 @@ namespace NzbDrone.Core.MediaFiles
                 return files ?? new List<string>();
             }
 
-            return files.Where(file => !movieFiles.Any(movieFile => MovieFileLayout.SameLibraryFile(movie.Path, movieFile.RelativePath, file))).ToList();
+            var knownPaths = new HashSet<string>(PathEqualityComparer.Instance);
+            var fileNameOnly = new List<MovieFile>();
+
+            foreach (var movieFile in movieFiles)
+            {
+                var combined = Path.Combine(movie.Path, movieFile.RelativePath);
+
+                try
+                {
+                    knownPaths.Add(combined);
+                }
+                catch (ArgumentException)
+                {
+                    // The comparer rejected the combined path. A bare file name can still match.
+                }
+
+                if (movieFile.RelativePath.IsNotNullOrWhiteSpace() &&
+                    movieFile.RelativePath.IndexOfAny(new[] { '/', '\\' }) < 0)
+                {
+                    fileNameOnly.Add(movieFile);
+                }
+            }
+
+            return files.Where(file => !IsKnownFile(knownPaths, fileNameOnly, movie, file)).ToList();
+        }
+
+        private static bool IsKnownFile(HashSet<string> knownPaths, List<MovieFile> fileNameOnly, Movie movie, string file)
+        {
+            try
+            {
+                if (knownPaths.Contains(file))
+                {
+                    return true;
+                }
+            }
+            catch (ArgumentException)
+            {
+                // An unusable disk path is not a known library file. The name check below still runs.
+            }
+
+            return fileNameOnly.Any(movieFile => MovieFileLayout.SameLibraryFile(movie.Path, movieFile.RelativePath, file));
         }
     }
 }

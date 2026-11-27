@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Linq.Expressions;
+using System.Threading;
+using System.Threading.Tasks;
 using FizzWare.NBuilder;
 using FluentAssertions;
 using Moq;
@@ -11,6 +13,7 @@ using NzbDrone.Common.Disk;
 using NzbDrone.Common.EnvironmentInfo;
 using NzbDrone.Common.Extensions;
 using NzbDrone.Core.Configuration;
+using NzbDrone.Core.MediaFiles;
 using NzbDrone.Core.Movies;
 using NzbDrone.Core.Organizer;
 using NzbDrone.Core.RootFolders;
@@ -449,6 +452,245 @@ namespace NzbDrone.Core.Test.RootFolderTests
             Subject.ApplyLibraryLayout(MovieFolderLayout.Flat);
 
             stored.FolderLayout.Should().Be(MovieFolderLayout.Flat);
+        }
+
+        [Test]
+        public void should_hide_files_already_mapped_to_a_movie_in_a_flat_root()
+        {
+            var rootFolderPath = @"C:\Movies".AsOsAgnostic();
+            var rootFolder = FlatRoot(11, rootFolderPath);
+            var heat = Path.Combine(rootFolderPath, "Heat (1995).mkv");
+            var nocturnal = Path.Combine(rootFolderPath, "Nocturnal Animals (2016).mkv");
+
+            GivenRoot(rootFolder, new Dictionary<int, string> { { 3, rootFolderPath } });
+            GivenFiles(rootFolderPath, false, heat, nocturnal);
+
+            Mocker.GetMock<IMediaFileService>()
+                .Setup(service => service.GetRelativePathsByMovies(It.IsAny<IEnumerable<int>>()))
+                .Returns(new List<MovieFilePath>
+                {
+                    new MovieFilePath { MovieId = 3, RelativePath = "Heat (1995).mkv" }
+                });
+
+            var unmapped = Subject.Get(rootFolder.Id, false).UnmappedFolders;
+
+            unmapped.Should().ContainSingle();
+            unmapped[0].Name.Should().Be("Nocturnal Animals (2016)");
+            unmapped[0].Path.Should().Be(rootFolderPath);
+            unmapped[0].RelativePath.Should().Be(rootFolderPath.GetRelativePath(nocturnal));
+        }
+
+        [Test]
+        public void should_not_list_a_movie_folder_that_is_already_in_the_library()
+        {
+            var rootFolderPath = @"C:\Movies".AsOsAgnostic();
+            var rootFolder = new RootFolder
+            {
+                Id = 12,
+                Path = rootFolderPath,
+                FolderLayout = MovieFolderLayout.MovieFolder
+            };
+            var heatFolder = Path.Combine(rootFolderPath, "Heat (1995)");
+            var looseFolder = Path.Combine(rootFolderPath, "Loose");
+
+            GivenRoot(rootFolder, new Dictionary<int, string> { { 3, heatFolder } });
+
+            Mocker.GetMock<IDiskProvider>()
+                .Setup(disk => disk.GetDirectories(rootFolderPath))
+                .Returns(new[] { heatFolder, looseFolder });
+
+            var unmapped = Subject.Get(rootFolder.Id, false).UnmappedFolders;
+
+            unmapped.Should().ContainSingle();
+            unmapped[0].Name.Should().Be("Loose");
+            unmapped[0].Path.Should().Be(looseFolder);
+        }
+
+        [Test]
+        public void should_list_loose_files_in_a_flat_root_even_when_many_movies_share_it()
+        {
+            var rootFolderPath = @"C:\Movies".AsOsAgnostic();
+            var rootFolder = FlatRoot(13, rootFolderPath);
+            var moviePaths = Enumerable.Range(1, 40).ToDictionary(id => id, id => rootFolderPath);
+            var files = Enumerable.Range(1, 20)
+                .Select(index => Path.Combine(rootFolderPath, $"Picture {index} (2001).mkv"))
+                .ToArray();
+
+            GivenRoot(rootFolder, moviePaths);
+            GivenFiles(rootFolderPath, false, files);
+
+            Mocker.GetMock<IMediaFileService>()
+                .Setup(service => service.GetRelativePathsByMovies(It.IsAny<IEnumerable<int>>()))
+                .Returns(new List<MovieFilePath>());
+
+            var unmapped = Subject.Get(rootFolder.Id, false).UnmappedFolders;
+
+            unmapped.Should().HaveCount(files.Length);
+            unmapped.Select(item => item.RelativePath).Should().BeEquivalentTo(files.Select(file => rootFolderPath.GetRelativePath(file)));
+
+            Mocker.GetMock<IRootFolderRepository>()
+                .Verify(repository => repository.All(), Times.Once());
+
+            Mocker.GetMock<INamingConfigService>()
+                .Verify(service => service.GetConfig(), Times.Once());
+
+            Mocker.GetMock<IMediaFileService>()
+                .Verify(service => service.GetFilesByMovies(It.IsAny<IEnumerable<int>>()), Times.Never());
+
+            Mocker.GetMock<IMediaFileService>()
+                .Verify(service => service.GetRelativePathsByMovies(It.IsAny<IEnumerable<int>>()), Times.Once());
+        }
+
+        [Test]
+        public void should_skip_a_file_inside_a_movie_folder_when_the_library_is_custom()
+        {
+            var rootFolderPath = @"C:\library\custom".AsOsAgnostic();
+            var parent = @"C:\library".AsOsAgnostic();
+            var rootFolder = new RootFolder
+            {
+                Id = 14,
+                Path = rootFolderPath,
+                FolderLayout = MovieFolderLayout.Custom
+            };
+            var inside = Path.Combine(rootFolderPath, "Heat (1995).mkv");
+
+            _namingConfig.FolderLayout = MovieFolderLayout.Custom;
+            GivenRoot(rootFolder, new Dictionary<int, string> { { 4, parent } });
+            GivenFiles(rootFolderPath, true, inside);
+
+            var unmapped = Subject.Get(rootFolder.Id, false).UnmappedFolders;
+
+            unmapped.Should().BeEmpty();
+        }
+
+        [Test]
+        public void should_list_a_flat_root_file_when_a_movie_path_only_contains_the_root()
+        {
+            var rootFolderPath = @"C:\library\flat".AsOsAgnostic();
+            var parent = @"C:\library".AsOsAgnostic();
+            var rootFolder = FlatRoot(15, rootFolderPath);
+            var inside = Path.Combine(rootFolderPath, "Heat (1995).mkv");
+
+            GivenRoot(rootFolder, new Dictionary<int, string> { { 4, parent } });
+            GivenFiles(rootFolderPath, false, inside);
+
+            var unmapped = Subject.Get(rootFolder.Id, false).UnmappedFolders;
+
+            unmapped.Should().ContainSingle();
+            unmapped[0].RelativePath.Should().Be(rootFolderPath.GetRelativePath(inside));
+        }
+
+        [Test]
+        public void should_stop_the_background_scan_when_the_wait_times_out()
+        {
+            var rootFolderPath = @"C:\Movies".AsOsAgnostic();
+            var rootFolder = FlatRoot(16, rootFolderPath);
+            var moviePaths = new Dictionary<int, string>();
+
+            Mocker.GetMock<IRootFolderRepository>()
+                .Setup(repository => repository.All())
+                .Returns(new List<RootFolder> { rootFolder });
+
+            Mocker.GetMock<IDiskProvider>()
+                .Setup(disk => disk.GetFiles(rootFolderPath, false))
+                .Returns(() =>
+                {
+                    var deadline = DateTime.UtcNow.AddSeconds(5);
+
+                    while (DateTime.UtcNow < deadline)
+                    {
+                        if (Subject.IsUnmappedScanCancellationRequested(rootFolderPath))
+                        {
+                            return Array.Empty<string>();
+                        }
+
+                        Thread.Sleep(10);
+                    }
+
+                    Assert.Fail("The unmapped scan was not cancelled.");
+                    return Array.Empty<string>();
+                });
+
+            Subject.GetDetails(rootFolder, moviePaths, TimeSpan.FromMilliseconds(200));
+            Subject.WaitForUnmappedScan(rootFolderPath, TimeSpan.FromSeconds(2)).Should().BeTrue();
+
+            Subject.IsUnmappedScanCancellationRequested(rootFolderPath).Should().BeTrue();
+            rootFolder.UnmappedFolders.Should().BeNull();
+        }
+
+        [Test]
+        public void should_not_start_a_second_scan_while_one_is_already_running()
+        {
+            var rootFolderPath = @"C:\Movies".AsOsAgnostic();
+            var first = FlatRoot(17, rootFolderPath);
+            var second = FlatRoot(17, rootFolderPath);
+            var file = Path.Combine(rootFolderPath, "Heat (1995).mkv");
+            var entered = 0;
+            var hold = new ManualResetEventSlim(false);
+
+            Mocker.GetMock<IRootFolderRepository>()
+                .Setup(repository => repository.All())
+                .Returns(new List<RootFolder> { first });
+
+            Mocker.GetMock<IDiskProvider>()
+                .Setup(disk => disk.GetFiles(rootFolderPath, false))
+                .Returns(() =>
+                {
+                    Interlocked.Increment(ref entered);
+                    hold.Wait(TimeSpan.FromSeconds(5));
+                    return new[] { file };
+                });
+
+            var service = Subject;
+            var moviePaths = new Dictionary<int, string>();
+            var firstCall = Task.Run(() => service.GetDetails(first, moviePaths, TimeSpan.FromSeconds(5)));
+
+            SpinWait.SpinUntil(() => Volatile.Read(ref entered) > 0, TimeSpan.FromSeconds(2)).Should().BeTrue();
+
+            var secondCall = Task.Run(() => service.GetDetails(second, moviePaths, TimeSpan.FromSeconds(5)));
+            Thread.Sleep(100);
+            hold.Set();
+            Task.WaitAll(firstCall, secondCall);
+
+            entered.Should().Be(1);
+            first.UnmappedFolders.Should().ContainSingle();
+            second.UnmappedFolders.Should().ContainSingle();
+            first.UnmappedFolders[0].Name.Should().Be("Heat (1995)");
+            second.UnmappedFolders[0].Name.Should().Be("Heat (1995)");
+        }
+
+        private RootFolder FlatRoot(int id, string path)
+        {
+            _namingConfig.FolderLayout = MovieFolderLayout.Flat;
+
+            return new RootFolder
+            {
+                Id = id,
+                Path = path,
+                FolderLayout = MovieFolderLayout.Flat
+            };
+        }
+
+        private void GivenRoot(RootFolder rootFolder, Dictionary<int, string> moviePaths)
+        {
+            Mocker.GetMock<IRootFolderRepository>()
+                .Setup(repository => repository.All())
+                .Returns(new List<RootFolder> { rootFolder });
+
+            Mocker.GetMock<IRootFolderRepository>()
+                .Setup(repository => repository.Get(rootFolder.Id))
+                .Returns(rootFolder);
+
+            Mocker.GetMock<IMovieRepository>()
+                .Setup(repository => repository.AllMoviePaths())
+                .Returns(moviePaths);
+        }
+
+        private void GivenFiles(string path, bool recursive, params string[] files)
+        {
+            Mocker.GetMock<IDiskProvider>()
+                .Setup(disk => disk.GetFiles(path, recursive))
+                .Returns(files);
         }
     }
 }

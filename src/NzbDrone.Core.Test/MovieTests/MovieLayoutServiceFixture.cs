@@ -6,6 +6,7 @@ using Moq;
 using NUnit.Framework;
 using NzbDrone.Common.Disk;
 using NzbDrone.Core.MediaFiles;
+using NzbDrone.Core.MediaFiles.Events;
 using NzbDrone.Core.Movies;
 using NzbDrone.Core.RootFolders;
 using NzbDrone.Core.Test.Framework;
@@ -168,6 +169,76 @@ namespace NzbDrone.Core.Test.MovieTests
             var selected = Subject.SelectExtraFiles(_nocturnal, new List<string> { nocturnalNfo, heatNfo }, new[] { nocturnalFile });
 
             selected.Should().Equal(nocturnalNfo);
+        }
+
+        [Test]
+        public void should_keep_each_shared_folder_when_refresh_alternates_roots()
+        {
+            var otherRoot = @"C:\Shows".AsOsAgnostic();
+            var other = new Movie
+            {
+                Id = 3,
+                Title = "Arrival",
+                Year = 2016,
+                Path = otherRoot
+            };
+            var nocturnalFile = Path.Combine(_root, "Nocturnal Animals (2016).mkv");
+            var arrivalFile = Path.Combine(otherRoot, "Arrival (2016).mkv");
+
+            Mocker.GetMock<IMovieRepository>()
+                .Setup(repository => repository.AllMoviePaths())
+                .Returns(new Dictionary<int, string>
+                {
+                    { _nocturnal.Id, _root },
+                    { _heat.Id, _root },
+                    { other.Id, otherRoot }
+                });
+
+            Mocker.GetMock<IMovieRepository>()
+                .Setup(repository => repository.Get(It.IsAny<IEnumerable<int>>()))
+                .Returns((IEnumerable<int> ids) => ids.Select(id =>
+                {
+                    if (id == other.Id)
+                    {
+                        return other;
+                    }
+
+                    return id == _heat.Id ? _heat : _nocturnal;
+                }).ToList());
+
+            Subject.SelectVideoFiles(_nocturnal, new List<string> { nocturnalFile }).Should().Equal(nocturnalFile);
+            Subject.SelectVideoFiles(other, new List<string> { arrivalFile }).Should().Equal(arrivalFile);
+            Subject.SelectVideoFiles(_heat, new List<string> { nocturnalFile, Path.Combine(_root, "Heat (1995).mkv") });
+            Subject.SelectVideoFiles(other, new List<string> { arrivalFile }).Should().Equal(arrivalFile);
+
+            Mocker.GetMock<IMovieRepository>()
+                .Verify(repository => repository.AllMoviePaths(), Times.Exactly(2));
+
+            Mocker.GetMock<IMediaFileService>()
+                .Verify(service => service.GetFilesByMovies(It.IsAny<IEnumerable<int>>()), Times.Never());
+
+            Mocker.GetMock<IMediaFileService>()
+                .Verify(service => service.GetRelativePathsByMovies(It.IsAny<IEnumerable<int>>()), Times.Exactly(2));
+        }
+
+        [Test]
+        public void should_reload_a_shared_folder_after_a_movie_file_is_added()
+        {
+            var nocturnalFile = Path.Combine(_root, "Nocturnal Animals (2016).mkv");
+
+            Subject.SelectVideoFiles(_nocturnal, new List<string> { nocturnalFile });
+
+            Subject.Handle(new MovieFileAddedEvent(new MovieFile
+            {
+                MovieId = _heat.Id,
+                Movie = _heat,
+                RelativePath = "Heat (1995).mkv"
+            }));
+
+            Subject.SelectVideoFiles(_heat, new List<string> { nocturnalFile });
+
+            Mocker.GetMock<IMovieRepository>()
+                .Verify(repository => repository.AllMoviePaths(), Times.Exactly(2));
         }
     }
 }

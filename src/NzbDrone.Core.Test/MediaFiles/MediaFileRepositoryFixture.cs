@@ -72,5 +72,29 @@ namespace NzbDrone.Core.Test.MediaFiles
             removedItems.Should().HaveCount(0);
             nonRemovedItems.Should().HaveCount(1);
         }
+
+        [Test]
+        public void get_relative_paths_by_movies_returns_only_those_movies()
+        {
+            var files = Builder<MovieFile>.CreateListOfSize(4)
+                .All()
+                .With(file => file.Id = 0)
+                .With(file => file.Quality = new QualityModel())
+                .With(file => file.Languages = new List<Language> { Language.English })
+                .With(file => file.RelativePath = "movie.mkv")
+                .TheFirst(2)
+                .With(file => file.MovieId = _movie1.Id)
+                .TheRest()
+                .With(file => file.MovieId = _movie2.Id)
+                .BuildListOfNew();
+
+            Db.InsertMany(files);
+
+            var paths = Subject.GetRelativePathsByMovies(new List<int> { _movie1.Id, _movie1.Id });
+
+            paths.Should().HaveCount(2);
+            paths.Should().OnlyContain(path => path.MovieId == _movie1.Id && path.RelativePath == "movie.mkv");
+            Subject.GetRelativePathsByMovies(new List<int>()).Should().BeEmpty();
+        }
     }
 }

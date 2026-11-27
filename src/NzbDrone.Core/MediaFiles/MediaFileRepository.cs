@@ -9,6 +9,7 @@ namespace NzbDrone.Core.MediaFiles
     {
         List<MovieFile> GetFilesByMovie(int movieId);
         List<MovieFile> GetFilesByMovies(IEnumerable<int> movieIds);
+        List<MovieFilePath> GetRelativePathsByMovies(IEnumerable<int> movieIds);
         List<MovieFile> GetFilesWithoutMediaInfo();
         void DeleteForMovies(List<int> movieIds);
 
@@ -30,6 +31,25 @@ namespace NzbDrone.Core.MediaFiles
         public List<MovieFile> GetFilesByMovies(IEnumerable<int> movieIds)
         {
             return Query(x => movieIds.Contains(x.MovieId));
+        }
+
+        public List<MovieFilePath> GetRelativePathsByMovies(IEnumerable<int> movieIds)
+        {
+            var ids = movieIds?.Distinct().ToList();
+
+            if (ids == null || ids.Count == 0)
+            {
+                return new List<MovieFilePath>();
+            }
+
+            // Media info is a large JSON column. Shared-folder matching only needs the path.
+            var builder = Builder()
+                .Select("\"MovieId\", \"RelativePath\"")
+                .Where<MovieFile>(file => ids.Contains(file.MovieId));
+
+            var sql = builder.AddTemplate(TableMapping.Mapper.SelectTemplate(typeof(MovieFile))).LogQuery();
+
+            return _database.Query<MovieFilePath>(sql.RawSql, sql.Parameters).ToList();
         }
 
         public List<MovieFile> GetFilesWithoutMediaInfo()
