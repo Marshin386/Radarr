@@ -7,6 +7,9 @@ using NzbDrone.Common;
 using NzbDrone.Common.Disk;
 using NzbDrone.Common.Extensions;
 using NzbDrone.Core.MediaFiles;
+using NzbDrone.Core.MediaFiles.Events;
+using NzbDrone.Core.Messaging.Events;
+using NzbDrone.Core.Movies.Events;
 using NzbDrone.Core.RootFolders;
 
 namespace NzbDrone.Core.Movies
@@ -20,8 +23,15 @@ namespace NzbDrone.Core.Movies
         IReadOnlyList<string> GetDeletableFilePaths(Movie movie, IEnumerable<string> movieFileRelativePaths);
     }
 
-    public class MovieLayoutService : IMovieLayoutService
+    public class MovieLayoutService : IMovieLayoutService,
+                                      IHandle<MovieFileAddedEvent>,
+                                      IHandle<MovieFileDeletedEvent>,
+                                      IHandle<MovieFileRenamedEvent>,
+                                      IHandle<MoviesDeletedEvent>
     {
+        private const int SharedFolderCacheLimit = 8;
+        private static readonly TimeSpan SharedFolderCacheTtl = TimeSpan.FromMinutes(2);
+
         private readonly IRootFolderService _rootFolderService;
         private readonly IMovieRepository _movieRepository;
         private readonly IMediaFileService _mediaFileService;
@@ -29,9 +39,7 @@ namespace NzbDrone.Core.Movies
         private readonly IDiskProvider _diskProvider;
         private readonly Logger _logger;
         private readonly object _folderMoviesGate = new object();
-        private string _folderMoviesPath;
-        private List<Movie> _folderMovies = new List<Movie>();
-        private DateTime _folderMoviesUtc;
+        private readonly Dictionary<string, SharedFolderSnapshot> _sharedFolders = new Dictionary<string, SharedFolderSnapshot>(PathEqualityComparer.Instance);
 
         public MovieLayoutService(IRootFolderService rootFolderService,
                                   IMovieRepository movieRepository,
@@ -203,6 +211,34 @@ namespace NzbDrone.Core.Movies
             return paths.Distinct(PathEqualityComparer.Instance).ToList();
         }
 
+        public void Handle(MovieFileAddedEvent message)
+        {
+            InvalidateFolder(message?.MovieFile?.Movie?.Path);
+        }
+
+        public void Handle(MovieFileDeletedEvent message)
+        {
+            InvalidateFolder(message?.MovieFile?.Movie?.Path);
+        }
+
+        public void Handle(MovieFileRenamedEvent message)
+        {
+            InvalidateFolder(message?.Movie?.Path);
+        }
+
+        public void Handle(MoviesDeletedEvent message)
+        {
+            if (message?.Movies == null)
+            {
+                return;
+            }
+
+            foreach (var movie in message.Movies)
+            {
+                InvalidateFolder(movie?.Path);
+            }
+        }
+
         private HashSet<string> KeptPaths(Movie movie)
         {
             var kept = movie == null ? null : _keptMovieFileRepository.GetByMovieId(movie.Id);
@@ -215,23 +251,19 @@ namespace NzbDrone.Core.Movies
         private HashSet<string> OtherMovieFilePaths(Movie movie)
         {
             var paths = new HashSet<string>(PathEqualityComparer.Instance);
-            var others = OtherMoviesSharingPath(movie);
+            var snapshot = GetSnapshot(movie?.Path);
 
-            if (!others.Any())
+            foreach (var pair in snapshot.FilesByMovie)
             {
-                return paths;
-            }
-
-            var byId = others.ToDictionary(other => other.Id);
-
-            foreach (var file in _mediaFileService.GetFilesByMovies(byId.Keys) ?? new List<MovieFile>())
-            {
-                if (file.RelativePath.IsNullOrWhiteSpace() || !byId.TryGetValue(file.MovieId, out var other))
+                if (movie != null && pair.Key == movie.Id)
                 {
                     continue;
                 }
 
-                paths.Add(Path.Combine(other.Path, file.RelativePath));
+                foreach (var path in pair.Value)
+                {
+                    paths.Add(path);
+                }
             }
 
             return paths;
@@ -239,41 +271,142 @@ namespace NzbDrone.Core.Movies
 
         private List<Movie> OtherMoviesSharingPath(Movie movie)
         {
-            return MoviesSharingPath(movie?.Path).Where(other => other.Id != movie.Id).ToList();
+            return GetSnapshot(movie?.Path).Movies.Where(other => other.Id != movie.Id).ToList();
         }
 
-        private List<Movie> MoviesSharingPath(string path)
+        private SharedFolderSnapshot GetSnapshot(string path)
         {
             if (path.IsNullOrWhiteSpace())
             {
-                return new List<Movie>();
+                return SharedFolderSnapshot.Empty;
             }
 
             lock (_folderMoviesGate)
             {
-                if (_folderMoviesPath.IsNotNullOrWhiteSpace() &&
-                    _folderMoviesPath.PathEquals(path) &&
-                    DateTime.UtcNow - _folderMoviesUtc < TimeSpan.FromMinutes(2))
+                if (_sharedFolders.TryGetValue(path, out var cached) && DateTime.UtcNow - cached.Utc < SharedFolderCacheTtl)
                 {
-                    return _folderMovies;
+                    return cached;
                 }
             }
 
+            var snapshot = LoadSnapshot(path);
+
+            lock (_folderMoviesGate)
+            {
+                if (_sharedFolders.TryGetValue(path, out var cached) && DateTime.UtcNow - cached.Utc < SharedFolderCacheTtl)
+                {
+                    return cached;
+                }
+
+                _sharedFolders[path] = snapshot;
+                TrimSharedFolders(path);
+                return snapshot;
+            }
+        }
+
+        private SharedFolderSnapshot LoadSnapshot(string path)
+        {
             var ids = (_movieRepository.AllMoviePaths() ?? new Dictionary<int, string>())
                 .Where(entry => entry.Value.IsNotNullOrWhiteSpace() && entry.Value.PathEquals(path))
                 .Select(entry => entry.Key)
                 .ToList();
 
-            var movies = ids.Any() ? (_movieRepository.Get(ids)?.ToList() ?? new List<Movie>()) : new List<Movie>();
+            var movies = ids.Count == 0
+                ? new List<Movie>()
+                : _movieRepository.Get(ids)?.ToList() ?? new List<Movie>();
 
-            lock (_folderMoviesGate)
+            var byId = new Dictionary<int, Movie>();
+
+            foreach (var movie in movies)
             {
-                _folderMoviesPath = path;
-                _folderMovies = movies;
-                _folderMoviesUtc = DateTime.UtcNow;
+                byId[movie.Id] = movie;
             }
 
-            return movies;
+            var filesByMovie = new Dictionary<int, HashSet<string>>();
+
+            if (byId.Count > 0)
+            {
+                foreach (var file in _mediaFileService.GetRelativePathsByMovies(byId.Keys) ?? new List<MovieFilePath>())
+                {
+                    if (file == null || file.RelativePath.IsNullOrWhiteSpace() || !byId.TryGetValue(file.MovieId, out var owner) || owner.Path.IsNullOrWhiteSpace())
+                    {
+                        continue;
+                    }
+
+                    if (!filesByMovie.TryGetValue(file.MovieId, out var paths))
+                    {
+                        paths = new HashSet<string>(PathEqualityComparer.Instance);
+                        filesByMovie[file.MovieId] = paths;
+                    }
+
+                    paths.Add(Path.Combine(owner.Path, file.RelativePath));
+                }
+            }
+
+            return new SharedFolderSnapshot
+            {
+                Movies = movies,
+                FilesByMovie = filesByMovie,
+                Utc = DateTime.UtcNow
+            };
+        }
+
+        private void TrimSharedFolders(string newestPath)
+        {
+            if (_sharedFolders.Count <= SharedFolderCacheLimit)
+            {
+                return;
+            }
+
+            string oldestKey = null;
+            var oldestUtc = DateTime.MaxValue;
+
+            foreach (var entry in _sharedFolders)
+            {
+                if (entry.Key.PathEquals(newestPath))
+                {
+                    continue;
+                }
+
+                if (entry.Value.Utc < oldestUtc)
+                {
+                    oldestUtc = entry.Value.Utc;
+                    oldestKey = entry.Key;
+                }
+            }
+
+            if (oldestKey != null)
+            {
+                _sharedFolders.Remove(oldestKey);
+            }
+        }
+
+        private void InvalidateFolder(string path)
+        {
+            lock (_folderMoviesGate)
+            {
+                if (path.IsNullOrWhiteSpace())
+                {
+                    _sharedFolders.Clear();
+                    return;
+                }
+
+                _sharedFolders.Remove(path);
+            }
+        }
+
+        private sealed class SharedFolderSnapshot
+        {
+            public static readonly SharedFolderSnapshot Empty = new SharedFolderSnapshot
+            {
+                Movies = new List<Movie>(),
+                FilesByMovie = new Dictionary<int, HashSet<string>>(),
+                Utc = DateTime.MinValue
+            };
+
+            public List<Movie> Movies { get; set; }
+            public Dictionary<int, HashSet<string>> FilesByMovie { get; set; }
+            public DateTime Utc { get; set; }
         }
     }
 }

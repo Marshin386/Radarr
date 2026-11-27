@@ -521,5 +521,55 @@ namespace NzbDrone.Core.Test.MediaFiles.DiskScanServiceTests
             Mocker.GetMock<IDiskProvider>()
                   .Verify(v => v.OpenReadStream(It.IsAny<string>()), Times.Never());
         }
+
+        [Test]
+        public void should_keep_both_flat_roots_when_refresh_alternates_between_them()
+        {
+            var firstRoot = @"C:\Movies".AsOsAgnostic();
+            var secondRoot = @"C:\Shows".AsOsAgnostic();
+            var first = new Movie { Id = 21, Title = "One", Path = firstRoot };
+            var second = new Movie { Id = 22, Title = "Two", Path = secondRoot };
+            var firstFile = Path.Combine(firstRoot, "One (2001).mkv");
+            var secondFile = Path.Combine(secondRoot, "Two (2002).mkv");
+
+            Mocker.GetMock<IDiskProvider>()
+                  .Setup(disk => disk.FolderExists(firstRoot))
+                  .Returns(true);
+
+            Mocker.GetMock<IDiskProvider>()
+                  .Setup(disk => disk.FolderExists(secondRoot))
+                  .Returns(true);
+
+            Mocker.GetMock<IDiskProvider>()
+                  .Setup(disk => disk.GetFiles(firstRoot, false))
+                  .Returns(new[] { firstFile });
+
+            Mocker.GetMock<IDiskProvider>()
+                  .Setup(disk => disk.GetFiles(secondRoot, false))
+                  .Returns(new[] { secondFile });
+
+            Mocker.GetMock<IMovieLayoutService>()
+                  .Setup(service => service.GetLayout(It.IsAny<Movie>()))
+                  .Returns(MovieFolderLayout.Flat);
+
+            Mocker.GetMock<IMovieLayoutService>()
+                  .Setup(service => service.SelectVideoFiles(It.IsAny<Movie>(), It.IsAny<List<string>>()))
+                  .Returns((Movie movie, List<string> found) => found);
+
+            Mocker.GetMock<IMovieLayoutService>()
+                  .Setup(service => service.SelectExtraFiles(It.IsAny<Movie>(), It.IsAny<List<string>>(), It.IsAny<IEnumerable<string>>()))
+                  .Returns((Movie movie, List<string> extras, IEnumerable<string> videos) => extras);
+
+            Subject.Scan(first);
+            Subject.Scan(second);
+            Subject.Scan(first);
+            Subject.Scan(second);
+
+            Mocker.GetMock<IDiskProvider>()
+                  .Verify(disk => disk.GetFiles(firstRoot, false), Times.Once());
+
+            Mocker.GetMock<IDiskProvider>()
+                  .Verify(disk => disk.GetFiles(secondRoot, false), Times.Once());
+        }
     }
 }

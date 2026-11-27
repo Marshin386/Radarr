@@ -32,6 +32,8 @@ namespace NzbDrone.Core.MediaFiles
         IDiskScanService,
         IExecute<RescanMovieCommand>
     {
+        private const int ListingCacheLimit = 8;
+
         private readonly IDiskProvider _diskProvider;
         private readonly IMakeImportDecision _importDecisionMaker;
         private readonly IImportApprovedMovie _importApprovedMovies;
@@ -46,10 +48,7 @@ namespace NzbDrone.Core.MediaFiles
         private readonly IEventAggregator _eventAggregator;
         private readonly Logger _logger;
         private readonly object _listingGate = new object();
-        private string _listingPath;
-        private bool _listingRecursive;
-        private string[] _listing = Array.Empty<string>();
-        private DateTime _listingUtc;
+        private readonly Dictionary<string, FolderListing> _listings = new Dictionary<string, FolderListing>(PathEqualityComparer.Instance);
 
         public DiskScanService(IDiskProvider diskProvider,
                                IMakeImportDecision importDecisionMaker,
@@ -238,13 +237,12 @@ namespace NzbDrone.Core.MediaFiles
         {
             lock (_listingGate)
             {
-                if (_listingPath.IsNotNullOrWhiteSpace() &&
-                    _listingPath.PathEquals(path) &&
-                    _listingRecursive == allDirectories &&
-                    DateTime.UtcNow - _listingUtc < TimeSpan.FromMinutes(2))
+                if (_listings.TryGetValue(path, out var cached) &&
+                    cached.Recursive == allDirectories &&
+                    DateTime.UtcNow - cached.Utc < TimeSpan.FromMinutes(2))
                 {
                     _logger.Trace("Reusing the directory listing for {0}", path);
-                    return _listing;
+                    return cached.Files;
                 }
             }
 
@@ -253,13 +251,47 @@ namespace NzbDrone.Core.MediaFiles
 
             lock (_listingGate)
             {
-                _listingPath = path;
-                _listingRecursive = allDirectories;
-                _listing = files;
-                _listingUtc = DateTime.UtcNow;
+                _listings[path] = new FolderListing
+                {
+                    Recursive = allDirectories,
+                    Files = files,
+                    Utc = DateTime.UtcNow
+                };
+
+                if (_listings.Count > ListingCacheLimit)
+                {
+                    string oldestKey = null;
+                    var oldestUtc = DateTime.MaxValue;
+
+                    foreach (var entry in _listings)
+                    {
+                        if (entry.Key.PathEquals(path))
+                        {
+                            continue;
+                        }
+
+                        if (entry.Value.Utc < oldestUtc)
+                        {
+                            oldestUtc = entry.Value.Utc;
+                            oldestKey = entry.Key;
+                        }
+                    }
+
+                    if (oldestKey != null)
+                    {
+                        _listings.Remove(oldestKey);
+                    }
+                }
             }
 
             return files;
+        }
+
+        private sealed class FolderListing
+        {
+            public bool Recursive { get; set; }
+            public string[] Files { get; set; }
+            public DateTime Utc { get; set; }
         }
 
         public string[] GetVideoFiles(string path, bool allDirectories = true)

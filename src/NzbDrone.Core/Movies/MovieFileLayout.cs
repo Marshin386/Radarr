@@ -3,6 +3,8 @@ using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Runtime.CompilerServices;
+using System.Text;
 using System.Text.RegularExpressions;
 using NzbDrone.Common;
 using NzbDrone.Common.EnvironmentInfo;
@@ -21,6 +23,9 @@ namespace NzbDrone.Core.Movies
     {
         private static readonly Regex YearFirstRegex = new Regex(@"^\(?((?:19|20)\d{2})\)?[ .\-_]+(?<title>.+)$", RegexOptions.Compiled);
         private static readonly ConcurrentDictionary<string, ParsedNames> ParsedFileCache = new ConcurrentDictionary<string, ParsedNames>(PathEqualityComparer.Instance);
+        private static readonly ConcurrentDictionary<string, string> CleanedTitleCache = new ConcurrentDictionary<string, string>(StringComparer.Ordinal);
+        private static readonly ConditionalWeakTable<Movie, CleanCandidateCache> MovieCleanTitles = new ConditionalWeakTable<Movie, CleanCandidateCache>();
+        private static readonly ConditionalWeakTable<ParsedMovieInfo, List<string>> ParsedCleanTitles = new ConditionalWeakTable<ParsedMovieInfo, List<string>>();
 
         private sealed class ParsedNames
         {
@@ -32,6 +37,13 @@ namespace NzbDrone.Core.Movies
 
             public ParsedMovieInfo Primary { get; }
             public ParsedMovieInfo YearFirst { get; }
+        }
+
+        private sealed class CleanCandidateCache
+        {
+            public object Gate { get; } = new object();
+            public string Signature { get; set; }
+            public HashSet<string> Titles { get; set; }
         }
 
         public static bool ExtraFileMatchesMovieStem(string filePath, string movieStem)
@@ -152,6 +164,15 @@ namespace NzbDrone.Core.Movies
                 return true;
             }
 
+            // A path-aware set already missed the combined path. Nested relative paths cannot
+            // match by file name alone, so the linear fallback would not find them either.
+            if (relativePath.IndexOfAny(new[] { '/', '\\' }) >= 0 &&
+                filesOnDisk is HashSet<string> pathSet &&
+                ReferenceEquals(pathSet.Comparer, PathEqualityComparer.Instance))
+            {
+                return false;
+            }
+
             return filesOnDisk.Any(file => SameLibraryFile(moviePath, relativePath, file));
         }
 
@@ -230,42 +251,14 @@ namespace NzbDrone.Core.Movies
                 return false;
             }
 
-            var parsedTitles = (parsed.MovieTitles ?? new List<string>())
-                .Where(title => title.IsNotNullOrWhiteSpace())
-                .Select(title => title.CleanMovieTitle())
-                .ToList();
+            var parsedTitles = CleanParsedTitles(parsed);
 
-            if (!parsedTitles.Any())
+            if (parsedTitles.Count == 0)
             {
                 return false;
             }
 
-            var candidates = new List<string>();
-
-            if (movie.Title.IsNotNullOrWhiteSpace())
-            {
-                candidates.Add(movie.Title);
-            }
-
-            var metadata = movie.MovieMetadata?.Value;
-
-            if (metadata != null)
-            {
-                if (metadata.OriginalTitle.IsNotNullOrWhiteSpace())
-                {
-                    candidates.Add(metadata.OriginalTitle);
-                }
-
-                if (metadata.AlternativeTitles != null)
-                {
-                    candidates.AddRange(metadata.AlternativeTitles.Where(title => title != null).Select(title => title.Title));
-                }
-            }
-
-            var cleanCandidates = candidates
-                .Where(title => title.IsNotNullOrWhiteSpace())
-                .Select(title => title.CleanMovieTitle())
-                .ToList();
+            var cleanCandidates = CleanCandidates(movie);
 
             if (!parsedTitles.Any(title => cleanCandidates.Contains(title)))
             {
@@ -274,7 +267,7 @@ namespace NzbDrone.Core.Movies
 
             if (parsed.Year > 0 && movie.Year > 0 && parsed.Year != movie.Year)
             {
-                var secondaryYear = metadata?.SecondaryYear ?? 0;
+                var secondaryYear = movie.MovieMetadata?.Value?.SecondaryYear ?? 0;
 
                 if (secondaryYear <= 0 || parsed.Year != secondaryYear)
                 {
@@ -283,6 +276,96 @@ namespace NzbDrone.Core.Movies
             }
 
             return true;
+        }
+
+        private static List<string> CleanParsedTitles(ParsedMovieInfo parsed)
+        {
+            return ParsedCleanTitles.GetValue(parsed, static info =>
+            {
+                var titles = new List<string>();
+
+                foreach (var title in info.MovieTitles ?? new List<string>())
+                {
+                    if (title.IsNotNullOrWhiteSpace())
+                    {
+                        titles.Add(CleanTitleOnce(title));
+                    }
+                }
+
+                return titles;
+            });
+        }
+
+        private static HashSet<string> CleanCandidates(Movie movie)
+        {
+            var entry = MovieCleanTitles.GetOrCreateValue(movie);
+
+            lock (entry.Gate)
+            {
+                var collected = CollectTitles(movie);
+
+                if (entry.Titles != null && entry.Signature == collected.Signature)
+                {
+                    return entry.Titles;
+                }
+
+                var cleaned = new HashSet<string>(StringComparer.Ordinal);
+
+                foreach (var title in collected.Values)
+                {
+                    cleaned.Add(CleanTitleOnce(title));
+                }
+
+                entry.Signature = collected.Signature;
+                entry.Titles = cleaned;
+                return cleaned;
+            }
+        }
+
+        private static (List<string> Values, string Signature) CollectTitles(Movie movie)
+        {
+            var values = new List<string>();
+            var signature = new StringBuilder();
+
+            void Add(string title)
+            {
+                if (title.IsNullOrWhiteSpace())
+                {
+                    return;
+                }
+
+                values.Add(title);
+                signature.Append(title.Length).Append(':').Append(title).Append('\n');
+            }
+
+            Add(movie.Title);
+
+            var metadata = movie.MovieMetadata?.Value;
+
+            if (metadata != null)
+            {
+                Add(metadata.OriginalTitle);
+
+                if (metadata.AlternativeTitles != null)
+                {
+                    foreach (var alternative in metadata.AlternativeTitles)
+                    {
+                        Add(alternative?.Title);
+                    }
+                }
+            }
+
+            return (values, signature.ToString());
+        }
+
+        private static string CleanTitleOnce(string title)
+        {
+            if (CleanedTitleCache.Count > 50000)
+            {
+                CleanedTitleCache.Clear();
+            }
+
+            return CleanedTitleCache.GetOrAdd(title, static value => value.CleanMovieTitle());
         }
     }
 }
